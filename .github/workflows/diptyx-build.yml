@@ -1,0 +1,77 @@
+name: Diptyx build
+
+# Builds the Diptyx firmware on every push to a diptyx-* branch and gates its size against the 6 MB factory
+# partition of the stock Diptyx flash layout. Hardware verification stays manual (see the port repo).
+on:
+  push:
+    branches: ['diptyx-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+      - name: Install PlatformIO Core
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          # Same pins as upstream's CI: the platform's builder imports these unconditionally.
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-diptyx-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-diptyx-${{ runner.os }}-
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          # See upstream's ci.yml / pioarduino/platform-espressif32#529 (SCons.Tool.FortranCommon failure).
+          pio pkg install -e diptyx
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          ~/.platformio/penv/bin/pio --version
+      - name: Build diptyx firmware
+        run: |
+          set -euo pipefail
+          pio run -e diptyx | tee pio.log
+      - name: Size gate
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          limit = 6 * 1024 * 1024          # stock Diptyx factory partition (0x10000, 6M)
+          warn_free = 250 * 1024           # headroom we want to keep
+          size = os.path.getsize('.pio/build/diptyx/firmware.bin')
+          free = limit - size
+          summary = f"firmware.bin = {size:,} bytes; partition {limit:,}; free {free:,} ({size / limit * 100:.1f}% used)"
+          print(summary)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write("## Diptyx firmware size\n\n" + summary + "\n")
+          if free < 0:
+              print("::error::firmware.bin does not fit the 6 MB factory partition")
+              sys.exit(1)
+          if free < warn_free:
+              print(f"::warning::only {free:,} bytes of headroom left in the 6 MB partition")
+          PY
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: diptyx-firmware-${{ github.sha }}
+          path: .pio/build/diptyx/firmware.bin
+          if-no-files-found: error
+          retention-days: 30

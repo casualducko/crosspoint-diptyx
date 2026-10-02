@@ -1,0 +1,113 @@
+name: Diptyx upstream canary
+
+# Weekly: is there new upstream CrossPoint work (or a new release)? Try merging upstream/develop into the current
+# diptyx branch, build the result, and keep one open issue up to date with what needs attention. Nothing is pushed.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Compare with upstream and trial-merge
+        id: trial
+        run: |
+          set -uo pipefail
+          git config user.name "diptyx-canary"
+          git config user.email "canary@users.noreply.github.com"
+          git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git
+          git fetch --tags upstream
+          base=$(git merge-base HEAD upstream/develop)
+          new=$(git rev-list --count "$base..upstream/develop")
+          tag=$(git tag --list --sort=-v:refname '[0-9]*' | grep -v rc | head -1)
+          newrelease=no
+          if ! git merge-base --is-ancestor "$tag" HEAD; then newrelease=yes; fi
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "newrelease=$newrelease" >> "$GITHUB_OUTPUT"
+          echo "base=${base:0:8}" >> "$GITHUB_OUTPUT"
+          if [ "$new" = "0" ] && [ "$newrelease" = "no" ]; then
+            echo "Up to date with upstream (release $tag, no new develop commits)."
+            echo "action=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "action=merge" >> "$GITHUB_OUTPUT"
+          conflicts=""
+          if git merge --no-edit upstream/develop > merge.log 2>&1; then
+            echo "merge=clean" >> "$GITHUB_OUTPUT"
+          else
+            conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            git merge --abort
+            echo "merge=conflict" >> "$GITHUB_OUTPUT"
+          fi
+          echo "conflicts=$conflicts" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v6
+        if: steps.trial.outputs.merge == 'clean'
+        with:
+          python-version: '3.13'
+      - name: Install uv
+        if: steps.trial.outputs.merge == 'clean'
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+      - name: Install PlatformIO Core
+        if: steps.trial.outputs.merge == 'clean'
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+      - name: Build the merged tree
+        id: build
+        if: steps.trial.outputs.merge == 'clean'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git submodule update --init --recursive
+          pio pkg install -e diptyx
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          pio run -e diptyx | tee pio.log
+          size=$(python3 -c "import os;print(os.path.getsize('.pio/build/diptyx/firmware.bin'))")
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+      - name: Report
+        if: steps.trial.outputs.action == 'merge'
+        run: |
+          set -uo pipefail
+          t='${{ steps.trial.outputs.merge }}'
+          if [ "$t" = "clean" ]; then
+            if [ '${{ steps.build.outcome }}' = "success" ]; then
+              result="merge clean, build OK (firmware.bin ${{ steps.build.outputs.size }} bytes of 6291456)"
+            else
+              result="merge clean but the BUILD FAILED"
+            fi
+          else
+            result="merge CONFLICTS in: ${{ steps.trial.outputs.conflicts }}"
+          fi
+          body="Upstream CrossPoint has moved since our base (${{ steps.trial.outputs.base }}).
+
+          - new upstream/develop commits: ${{ steps.trial.outputs.new }}
+          - latest upstream release tag: ${{ steps.trial.outputs.tag }} (newer than our branch: ${{ steps.trial.outputs.newrelease }})
+          - trial merge of upstream/develop into this branch: $result
+
+          Next: in the port repo run \`python3 tools/changes.py upstream --fetch\`, create the next \`diptyx-<release>\` branch, re-apply our patch stack, rebuild, then run the hardware checklist (CHANGES.md). Nothing was pushed by this job."
+          echo "$body" >> "$GITHUB_STEP_SUMMARY"
+          existing=$(gh issue list --state open --search "Upstream update in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "Upstream update available" --body "$body"
+          fi
