@@ -30,6 +30,7 @@ enum class SettingAction {
   KeyboardLayouts,
   HomeButton,
   About,
+  Restart,
 };
 
 struct SettingInfo {

@@ -113,6 +113,10 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  // The Diptyx has no reset button or X4-style button combination, so offer a deliberate restart here.
+  if (BoardConfig::isDiptyx()) {
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_RESTART_DEVICE, SettingAction::Restart));
+  }
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
@@ -447,6 +451,15 @@ void SettingsActivity::toggleCurrentSetting() {
           LOG_ERR("SETTINGS", "OOM: AboutActivity");
         }
         break;
+      case SettingAction::Restart: {
+        // A full restart (splash, fresh heap), not the silent heap-defrag one. Settings are saved on every change;
+        // the power latch is held through the reset by the Diptyx shutdown handler registered in setup().
+        RenderLock lock;
+        GUI.drawPopup(renderer, tr(STR_RESTARTING_HINT));
+        delay(50);
+        ESP.restart();
+        break;
+      }
       case SettingAction::None:
         // Do nothing
         break;

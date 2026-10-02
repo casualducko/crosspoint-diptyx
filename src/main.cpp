@@ -21,6 +21,8 @@
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
+#include <driver/gpio.h>
+#include <esp_system.h>
 
 #include <cstring>
 
@@ -428,8 +430,20 @@ void setupDisplayAndFonts(bool seamless = false) {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
+// Diptyx: keep the battery power latch (GPIO38) held high through a software restart. A restart resets the pin to its
+// input default for a moment, and the latch is the only thing keeping a battery-powered board on. esp_restart() (and so
+// ESP.restart()) runs shutdown handlers; setup() releases the hold again through holdPowerRails().
+static void holdPowerLatchThroughRestart() {
+  const int8_t pin = BoardConfig::ACTIVE.power.latch0;
+  if (pin < 0) return;
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
+  gpio_hold_en(static_cast<gpio_num_t>(pin));
+}
+
 void setup() {
   BoardConfig::holdPowerRails();
+  if (BoardConfig::isDiptyx()) esp_register_shutdown_handler(holdPowerLatchThroughRestart);
 
 #ifdef ENABLE_SERIAL_LOG
 #ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
