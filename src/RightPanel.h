@@ -4,6 +4,9 @@
 #include <HalDisplay.h>
 #include <Logging.h>
 
+#include <cstddef>
+#include <cstdint>
+
 // Diptyx second (right) panel, shown while the left panel runs the normal UI. No-ops on every other board.
 //
 // Each call saves the left panel's frame, draws into the shared framebuffer, refreshes the RIGHT panel, and puts the
@@ -14,9 +17,16 @@ namespace RightPanel {
 // night mode. Skips the refresh when the panel already shows this book's card in the current polarity.
 void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display);
 
-// The left panel's night-mode setting changed: if the right panel currently shows the home card, redraw it in the new
-// polarity right away (no-op when it shows a reader page, the idle image, or nothing known).
-void refreshCardPolarity(GfxRenderer& renderer, HalDisplay& display);
+// The left panel's night-mode setting changed: show the right panel's last frame again in the new polarity. No
+// re-render is needed (the display inverts at output), so this works whatever activity or menu is on top, for the home
+// card and for a reader page alike. No-op when the right panel shows the idle image or nothing known.
+void refreshPolarity(GfxRenderer& renderer, HalDisplay& display);
+
+namespace detail {
+// Keep a copy of the frame just drawn for the right panel (polarity-following content), or forget it.
+void rememberFrame(const uint8_t* frame, size_t bytes, bool inverted);
+void forgetFrame();
+}  // namespace detail
 
 // The right panel now shows something else (a reader page): make the home screen redraw its card next time.
 void markDirty();
@@ -42,6 +52,14 @@ bool present(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMo
   if (flipPolarity) d.setInverted(false);
 
   draw();
+
+  // Polarity-following content is remembered so a later night-mode toggle can show it again without a re-render.
+  if (keepInversion) {
+    detail::rememberFrame(d.getFrameBuffer(), static_cast<size_t>(r.getDisplayWidthBytes()) * r.getDisplayHeight(),
+                          d.isInverted());
+  } else {
+    detail::forgetFrame();
+  }
 
   d.selectPanel(HalDisplay::Panel::Right);
   r.displayBuffer(mode);

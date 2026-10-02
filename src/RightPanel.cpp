@@ -11,9 +11,11 @@
 #include <Logging.h>
 #include <Xtc.h>
 #include <esp_attr.h>
+#include <esp_heap_caps.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <utility>
 
@@ -177,6 +179,15 @@ bool presentOnRight(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, bool followNig
   return RightPanel::present(r, d, std::forward<DrawFn>(draw), HalDisplay::HALF_REFRESH, followNightMode);
 }
 
+// The frame last shown on the right panel in a polarity-following mode (home card, reader page), so a night-mode toggle
+// can show it again without re-rendering. One persistent buffer (panel size, ~39 KB), allocated once on first use,
+// preferably in PSRAM, and never freed; if it cannot be allocated the toggle simply takes effect on the next redraw.
+uint8_t* storedFrame = nullptr;
+size_t storedCapacity = 0;
+size_t storedBytes = 0;
+bool storedValid = false;
+bool storedInverted = false;
+
 // Cache key of a card: the book plus the polarity it was drawn in.
 uint32_t cardKey(bool hasBook, const std::string& path, bool inverted) {
   const uint32_t key = (hasBook ? hashString(path) : 1u) ^ (inverted ? 0x9E3779B9u : 0u);
@@ -204,15 +215,45 @@ void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display) {
   }
 }
 
-void refreshCardPolarity(GfxRenderer& renderer, HalDisplay& display) {
-  if (!BoardConfig::isDiptyx() || shownKey == 0 || !shownCardValid) return;
-  const bool hasBook = !shownCard.path.empty();
-  const uint32_t key = cardKey(hasBook, shownCard.path, display.isInverted());
-  if (key == shownKey) return;
-  if (presentOnRight(renderer, display, [&] { drawBookCard(renderer, shownCard); }, /*followNightMode=*/true)) {
-    shownKey = key;
+void refreshPolarity(GfxRenderer& renderer, HalDisplay& display) {
+  if (!BoardConfig::isDiptyx() || !storedValid) return;
+  const bool inverted = display.isInverted();
+  if (inverted == storedInverted) return;
+  const size_t bytes = storedBytes;
+  // present() re-remembers the same frame, now in the new polarity.
+  if (presentOnRight(
+          renderer, display, [&] { memcpy(display.getFrameBuffer(), storedFrame, bytes); }, /*followNightMode=*/true) &&
+      shownKey != 0 && shownCardValid) {
+    shownKey = cardKey(!shownCard.path.empty(), shownCard.path, inverted);  // the card is on the panel in this polarity
   }
 }
+
+namespace detail {
+
+void rememberFrame(const uint8_t* frame, size_t bytes, bool inverted) {
+  if (!frame || bytes == 0) return;
+  if (!storedFrame || storedCapacity < bytes) {
+    // Persistent by design (see storedFrame): allocate once, PSRAM first.
+    auto* buffer = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!buffer) buffer = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_8BIT));
+    if (!buffer) {
+      LOG_ERR("RP", "OOM: %u bytes for the right-panel frame copy", static_cast<unsigned>(bytes));
+      storedValid = false;
+      return;
+    }
+    if (storedFrame) heap_caps_free(storedFrame);
+    storedFrame = buffer;
+    storedCapacity = bytes;
+  }
+  if (frame != storedFrame) memcpy(storedFrame, frame, bytes);
+  storedBytes = bytes;
+  storedInverted = inverted;
+  storedValid = true;
+}
+
+void forgetFrame() { storedValid = false; }
+
+}  // namespace detail
 
 void markDirty() { shownKey = 0; }
 

@@ -77,9 +77,10 @@ void ActivityManager::renderTaskLoop() {
       // The sleep screen forces normal polarity itself (SleepActivity).
       display.setInverted(SETTINGS.screenInverted != 0);
       if (BoardConfig::isDiptyx() && (SETTINGS.screenInverted != 0) != rightPanelInverted) {
-        // Night mode was toggled: the Diptyx's right-panel card follows it at once (a reader page does so itself).
+        // Night mode was toggled (from Settings or any reader menu): the Diptyx's right panel shows its last frame
+        // again in the new polarity at once, whatever activity is on top.
         rightPanelInverted = SETTINGS.screenInverted != 0;
-        RightPanel::refreshCardPolarity(renderer, display);
+        RightPanel::refreshPolarity(renderer, display);
       }
       currentActivity->render(std::move(lock));
     }

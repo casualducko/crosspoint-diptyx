@@ -1940,11 +1940,11 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   const int fontId = SETTINGS.getReaderFontId();
 
   // Skip the panel refresh when nothing about the right page changed (e.g. the menu overlay opened and closed).
+  // Night mode is not part of the key: RightPanel::refreshPolarity() re-shows the stored frame when it flips.
   uint32_t key = 2166136261u;
-  for (const uint32_t v :
-       {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n), static_cast<uint32_t>(pageExists),
-        static_cast<uint32_t>(section->pageCount), static_cast<uint32_t>(fontId),
-        static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(display.isInverted())}) {
+  for (const uint32_t v : {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n),
+                           static_cast<uint32_t>(pageExists), static_cast<uint32_t>(section->pageCount),
+                           static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
