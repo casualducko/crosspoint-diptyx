@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrossPoint for Diptyx - web flasher</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.5rem; } code { background: #eee; padding: .1em .3em; border-radius: 3px; }
+  .warn { border-left: 4px solid #c60; background: #fff4e5; padding: .6rem 1rem; }
+  ol li { margin-bottom: .5rem; }
+</style>
+</head>
+<body>
+<h1>CrossPoint for the Diptyx e-reader</h1>
+<p>Unofficial port of the <a href="https://github.com/crosspoint-reader/crosspoint-reader">CrossPoint</a> reader firmware to the Diptyx dual-screen e-reader.
+This page flashes it from your browser. It needs <strong>Chrome, Edge or another Chromium browser</strong> (Windows, macOS or Linux).
+Safari and Firefox cannot do this; use <a href="https://github.com/casualducko/crosspoint-diptyx/tree/main/diptyx#option-b-the-flash-script">the flash script</a> instead.</p>
+<div class="warn"><strong>Back up first.</strong> This writes only the app region (0x10000) and leaves your bootloader, partition table and settings alone,
+but you should still keep a copy of your current firmware. The flash script can make one:
+<code>python flash.py backup</code> (see the <a href="https://github.com/casualducko/crosspoint-diptyx/blob/main/diptyx/README.md">guide</a>).
+Going back to the stock firmware is described there too.</div>
+<ol>
+  <li>Switch the Diptyx fully off (hold the power button ~20 s), <strong>hold the centre joystick pressed in</strong>, and plug in the USB-C data cable while holding it. Release after ~3 seconds.</li>
+  <li>Click the button below, pick the <em>USB JTAG/serial debug unit</em> port, and follow the prompts. Do not tick "erase".</li>
+  <li>When it finishes, unplug the cable and plug it in again <em>without</em> touching the joystick.</li>
+</ol>
+<esp-web-install-button manifest="manifest.json">
+  <button slot="activate">Install CrossPoint on my Diptyx</button>
+  <span slot="unsupported">This browser cannot flash devices. Use Chrome or Edge, or the flash script.</span>
+  <span slot="not-allowed">Web flashing needs HTTPS (this page).</span>
+</esp-web-install-button>
+<p><small>Version <span id="v"></span>. Source and guide: <a href="https://github.com/casualducko/crosspoint-diptyx/tree/main/diptyx">github.com/casualducko/crosspoint-diptyx</a>.
+Not affiliated with the Diptyx makers or the CrossPoint project. Use at your own risk.</small></p>
+<script>
+  fetch('manifest.json').then(r => r.json()).then(m => { document.getElementById('v').textContent = m.version; });
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+name: Diptyx release
+
+# Push a tag like `diptyx-v1.6.5-1` to build the firmware, publish a GitHub release (app image + checksum, which
+# diptyx/flash.py downloads) and deploy the browser flasher (diptyx/web) to GitHub Pages.
+on:
+  push:
+    tags: ['diptyx-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: diptyx-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+      - name: Install PlatformIO Core
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-diptyx-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-diptyx-${{ runner.os }}-
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          pio pkg install -e diptyx
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+      - name: Build
+        run: pio run -e diptyx
+      - name: Package release assets and the web flasher
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#diptyx-v}"
+          [ "$GITHUB_REF_TYPE" = "tag" ] || ver="dev-${GITHUB_SHA::7}"
+          size=$(stat -c %s .pio/build/diptyx/firmware.bin)
+          [ "$size" -le 6291456 ] || { echo "firmware.bin does not fit the 6 MB app slot"; exit 1; }
+          mkdir -p dist site/firmware
+          app="crosspoint-diptyx-${ver}-app.bin"
+          cp .pio/build/diptyx/firmware.bin "dist/$app"
+          (cd dist && sha256sum "$app" > "$app.sha256")
+          cp diptyx/web/index.html site/
+          cp .pio/build/diptyx/firmware.bin site/firmware/crosspoint-diptyx-app.bin
+          python3 - "$ver" <<'PY'
+          import json, sys
+          m = json.load(open('diptyx/web/manifest.json'))
+          m['version'] = sys.argv[1]
+          json.dump(m, open('site/manifest.json', 'w'), indent=2)
+          PY
+          cat > release-notes.md <<NOTES
+          CrossPoint for the Diptyx, version ${ver} (app image, ${size} bytes).
+
+          **Easiest:** use the web flasher (Chrome/Edge) or the flash script, both described in the guide:
+          https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/diptyx/README.md
+
+          The \`*-app.bin\` file is only the app region (flashed at 0x10000); it is not a full-flash image. Verify it against the
+          \`.sha256\` file. Back up your device first. Unofficial; use at your own risk.
+          NOTES
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Create the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "CrossPoint for Diptyx ${GITHUB_REF_NAME#diptyx-v}" --notes-file release-notes.md --verify-tag
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
