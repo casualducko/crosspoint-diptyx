@@ -1,5 +1,7 @@
 #include "BaseTheme.h"
 
+#include <BoardConfig.h>
+
 #include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
@@ -229,6 +231,17 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const int* buttonPositions = renderer.getScreenWidth() >= 528 ? wideButtonPositions : narrowButtonPositions;
   const char* labels[] = {btn1, btn2, btn3, btn4};
   const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
+
+  // Diptyx has three bottom buttons (page-left, joystick, page-right): draw Back / Select / Next centred over them
+  // and drop the Prev slot (joystick-left still works, it just has no hint).
+  constexpr int diptyxButtonPositions[] = {13, 187, 361};
+  const char* diptyxLabels[] = {btn1, btn2, btn4};
+  const bool threeButtons = BoardConfig::isDiptyx();
+  if (threeButtons) {
+    buttonPositions = diptyxButtonPositions;
+    for (int i = 0; i < 3; i++) labels[i] = diptyxLabels[i];
+    labels[3] = nullptr;
+  }
 
   for (int i = 0; i < 4; i++) {
     // Only draw if the label is non-empty

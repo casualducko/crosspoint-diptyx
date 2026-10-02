@@ -1,5 +1,7 @@
 #include "LyraTheme.h"
 
+#include <BoardConfig.h>
+
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -130,7 +132,19 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const char* labels[] = {btn1, btn2, btn3, btn4};
   const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
-  for (int i = 0; i < 4; i++) {
+  // Diptyx has three bottom buttons (page-left, joystick, page-right): draw Back / Select / Next centred over them
+  // (box centres at x = 66 / 240 / 414 of the 480-wide portrait panel) and drop the Prev slot. Joystick-left
+  // still works, it just has no hint.
+  constexpr int diptyxButtonPositions[] = {26, 200, 374};
+  const char* diptyxLabels[] = {btn1, btn2, btn4};
+  const bool threeButtons = BoardConfig::isDiptyx();
+  const int hintCount = threeButtons ? 3 : 4;
+  if (threeButtons) {
+    buttonPositions = diptyxButtonPositions;
+    for (int i = 0; i < 3; i++) labels[i] = diptyxLabels[i];
+  }
+
+  for (int i = 0; i < hintCount; i++) {
     const int x = buttonPositions[i];
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       // Draw the filled background and border for a FULL-sized button
