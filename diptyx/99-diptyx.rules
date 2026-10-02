@@ -1,4 +1,0 @@
-# Linux: let a normal user talk to the Diptyx (Espressif USB-Serial/JTAG, 303a:1001) in download mode.
-# Install:  sudo cp 99-diptyx.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger
-# Then unplug and re-plug the device.
-SUBSYSTEMS=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", MODE="0660", TAG+="uaccess"

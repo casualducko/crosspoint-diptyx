@@ -14,12 +14,13 @@ project. Use it at your own risk; you can always go back to the stock firmware (
 - Black-and-white rendering tuned for the Diptyx panels, standby and real power-off, battery level, USB mass storage (use the SD card
   like a USB drive).
 
-Not there yet: Wi-Fi features (file transfer, OPDS) are **untested** on the Diptyx; TXT/XTC books have no two-page spread; the status LED
+Not there yet: Wi-Fi features (file transfer, OPDS) are **untested** on the Diptyx; TXT/XTC books have no two-page spread; footnote and link
+selection works on the left page of a spread only; the status LED
 and the rumble motor are unused; no grayscale (the panels are black and white); no over-the-air updates (reflash with the steps below).
 
 ## Before you start
 
-- A Diptyx running the **stock firmware layout** (1.0.x). The tools check this and refuse to flash anything else.
+- A Diptyx running the **stock firmware layout** (1.0.x). The flash script checks this and refuses to flash anything else (the web flasher does not check).
 - A USB-C **data** cable (a charge-only cable will not work) and a computer running Windows 10/11, macOS or Linux.
 - Your books on the SD card as usual. CrossPoint keeps its own files in a `.crosspoint` folder there.
 - **A backup.** Flashing only writes the app slot, but keep a copy of what you have. The flash script makes one for you (about 3 minutes).
@@ -38,19 +39,20 @@ in again **without** touching the joystick.
 ## Option A: the web flasher (easiest)
 
 Open **https://casualducko.github.io/crosspoint-diptyx/** in **Chrome or Edge** (Windows, macOS, Linux). Click *Install*, choose the
-*USB JTAG/serial* port, and follow the prompts. Do not tick *erase*. Safari and Firefox cannot flash devices; use option B.
+*USB JTAG/serial* port, and follow the prompts. Safari and Firefox cannot flash devices; use option B.
 
-> The web flasher is new and has had less testing than the script. If anything looks wrong, stop and use option B.
+> The web flasher is new and has had less testing than the script, and unlike the script it does **not** check your device's partition
+> table before writing. If you are unsure your device has the stock layout, run `flash.sh check` (option B) first, or just use option B.
 
 ## Option B: the flash script
 
-Works the same on Windows, macOS and Linux. It needs Python 3.8 or newer (https://www.python.org/downloads/). Get the `diptyx` folder
+Works the same on Windows, macOS and Linux. It needs **Python 3.10 or newer** (https://www.python.org/downloads/; the Python that ships with macOS is too old, install a newer one). Get the `diptyx` folder
 (download the repository as a ZIP from GitHub, or clone it), open a terminal in it, put the device in download mode, then:
 
 | System | Command |
 |---|---|
 | macOS / Linux | `./flash.sh` |
-| Windows | `flash.bat` (double-click, or run it in *Command Prompt* / *PowerShell*) |
+| Windows | `flash.bat` (double-click it, or run it in *Command Prompt* / *PowerShell*) |
 | Any (if you manage Python yourself) | `python -m pip install --upgrade "esptool>=5"` then `python flash.py` |
 
 The first run sets up a private Python environment inside the folder (nothing is installed system-wide). Then it:
@@ -100,13 +102,14 @@ Your stock settings are untouched by CrossPoint, so the stock firmware comes bac
 - **"No Espressif USB device found" / cannot connect:** redo the download-mode steps; use a different cable (it must carry data) and port.
   Plug in the cable *while* holding the joystick, and make sure the device was fully off first.
 - **Linux, "permission denied":** add yourself to the serial group (`sudo usermod -aG dialout $USER` on Debian/Ubuntu, `uucp` on Arch/Fedora,
-  then log out and in) or install the udev rule: `sudo cp 99-diptyx.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger`.
+  then log out and in) or install the udev rule: `sudo cp 70-diptyx.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger` (then re-plug).
 - **Windows:** no driver is needed on Windows 10/11. If *Device Manager* shows an unknown device, run Windows Update or install the
   Espressif USB JTAG/serial driver.
 - **macOS:** nothing to install. If it asks for permission to access removable devices, allow it.
 - **After flashing it sits in download mode:** unplug, switch off for 20 seconds, plug in again *without* touching the joystick.
-- **Screen contrast looks washed out or too dark:** the display voltage (VCOM) is fixed at the stock default (23) and is not yet read from
-  your unit's own setting. Please open an issue with your stock `vcomLeft`/`vcomRight` values if the default does not suit your panels.
+- **Screen contrast looks washed out or too dark:** the display voltage (VCOM) is read from your unit's own settings left by the stock
+  firmware (`vcomLeft` / `vcomRight`); if there are none (a unit that never ran the stock firmware) it uses the stock default, 23. The serial
+  log shows the values used (`[DIPTYX] left panel VCOM ...`). Open an issue with your stock values if the picture still looks wrong.
 - **It will not boot at all:** download mode always works (it is in the chip's ROM, not in flash). Flash the stock app as shown above.
 
 ## Safety, in plain words

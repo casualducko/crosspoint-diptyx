@@ -1,7 +1,6 @@
 #include "BaseTheme.h"
 
 #include <BoardConfig.h>
-
 #include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>

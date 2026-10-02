@@ -22,6 +22,7 @@
 #include <iterator>
 #include <limits>
 
+#include "../../RightPanel.h"
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
@@ -41,7 +42,6 @@
 #include "ReaderFontSizes.h"
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
-#include "../../RightPanel.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -424,7 +424,7 @@ void EpubReaderActivity::loop() {
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
-      const int nextPage = section->currentPage + 1;
+      const int nextPage = section->currentPage + (spreadActive() ? 2 : 1);
       if (nextPage < static_cast<int>(section->pageCount)) {
         if (const auto p = section->loadPage(nextPage)) {
           if (auto* fcm = renderer.getFontCacheManager()) {
@@ -1049,6 +1049,7 @@ void EpubReaderActivity::applyInitialOrientation() {
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
+  rightPageKey = 0;  // spread is portrait-only: redraw the right panel when coming back
   // Also runs when SETTINGS already holds the new value but this layout was
   // built for the old one — that is what an external change looks like here.
   if (SETTINGS.orientation == orientation && appliedOrientation == orientation) {
@@ -1458,18 +1459,22 @@ void EpubReaderActivity::renderBook() {
     }
   }
 
-  if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+  // In a spread the right page (currentPage + 1) must exist too, or the chapter be completely built; otherwise a
+  // chapter still being indexed would show a blank right page as if it had ended.
+  const int spreadLookahead = spreadActive() ? 1 : 0;
+  if (section->isPartial() && section->currentPage + spreadLookahead >= static_cast<int>(section->pageCount)) {
     GUI.drawPopup(renderer, tr(STR_INDEXING));
     pagesUntilFullRefresh = 1;
   }
-  while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+  while (section->isPartial() && section->currentPage + spreadLookahead >= static_cast<int>(section->pageCount)) {
     if (!section->isBuilding() && !section->startBuild(renderSpec)) {
       LOG_ERR("ERS", "Failed to start partial extension build");
       section.reset();
       showBuildError();
       return;
     }
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+    while (!section->isBuildComplete() &&
+           section->currentPage + spreadLookahead >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
         section.reset();
@@ -1479,7 +1484,8 @@ void EpubReaderActivity::renderBook() {
     }
   }
   if (section->isBuilding()) {
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+    while (!section->isBuildComplete() &&
+           section->currentPage + spreadLookahead >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
         section.reset();
@@ -1559,7 +1565,7 @@ void EpubReaderActivity::renderBook() {
     discardOverlayPage();
 
     const auto start = millis();
-    const bool leftRefreshIsFull = pagesUntilFullRefresh <= 1;  // renderContents() applies the same rule
+    const bool leftRefreshIsFull = forcedRefreshPending || pagesUntilFullRefresh <= 1;  // as renderContents() decides
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
@@ -1698,8 +1704,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   forcedRefreshPending = false;
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   // Skip the anti-aliasing passes on B/W-only panels (Diptyx): they would only cost render time.
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing && renderer.grayscaleCapabilities().supported();
-  const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
+  const bool bwOnlyPanel = BoardConfig::isDiptyx();
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing && !bwOnlyPanel;
+  const bool needsAnyGrayscale = (needsTextGrayscale || pageHasImages) && !bwOnlyPanel;
   const bool absoluteImageGrayscale = pageHasImages && !gpio.deviceIsX3() &&
                                       display.getController() == HalDisplay::Controller::UC8279 &&
                                       renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
@@ -1747,7 +1754,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // the panel receptive to the gray waveform; pending cleanup still honors
     // the scheduled/manual HALF refresh.
     renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
-    pagesUntilFullRefresh = 1;
+    if (!bwOnlyPanel) pagesUntilFullRefresh = 1;  // the gray pass that follows needs a clean base
   } else if (combinedGrayscaleBase) {
     // Stash the base without activating; displayGrayBuffer() below commits
     // base + grays as one waveform.
@@ -1946,6 +1953,10 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   const auto draw = [&] {
     renderer.clearScreen();
     if (!rightPage) return;
+    ImageBlock::clearRenderFailures();
+    struct PxcSlotGuard {
+      ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+    } pxcSlotGuard;
     // Same two-pass sequence as renderContents(): scan for glyphs, prewarm, then the real draw.
     auto* fcm = renderer.getFontCacheManager();
     auto scope = fcm->createPrewarmScope();
@@ -1957,7 +1968,8 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
     renderStatusBar(1);
   };
 
-  if (RightPanel::present(renderer, display, draw, leftWasFull ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH)) {
+  if (RightPanel::present(renderer, display, draw, leftWasFull ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH,
+                          /*keepInversion=*/true)) {
     rightPageKey = key;
     RightPanel::markDirty();  // the home screen must redraw its card after reading
   }
@@ -1992,8 +2004,8 @@ void EpubReaderActivity::renderStatusBar(const int pageOffset) const {
     title = epub ? epub->getTitle() : "";
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
-                    section ? section->isBuilding() : false);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true,
+                    pageOffset == 0 && currentPageBookmarked, section ? section->isBuilding() : false);
 }
 
 // ---------------------------------------------------------------------------
@@ -2595,7 +2607,8 @@ void EpubReaderActivity::applyReaderTextSettings() {
     cachedChapterTotalPageCount = section->pageCount;
     nextPageNumber = section->currentPage;
   }
-  section.reset();  // force re-pagination with the new settings
+  section.reset();   // force re-pagination with the new settings
+  rightPageKey = 0;  // the right page was laid out with the old settings
 }
 
 // The More panel carries everything the classic list menu offers except the

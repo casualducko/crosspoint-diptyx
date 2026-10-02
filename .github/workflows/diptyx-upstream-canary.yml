@@ -14,13 +14,12 @@ permissions:
 jobs:
   canary:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
+          persist-credentials: false  # upstream's build scripts run later; they must not find a token
       - name: Compare with upstream and trial-merge
         id: trial
         run: |
@@ -33,7 +32,8 @@ jobs:
           new=$(git rev-list --count "$base..upstream/develop")
           tag=$(git tag --list --sort=-v:refname '[0-9]*' | grep -v rc | head -1)
           newrelease=no
-          if ! git merge-base --is-ancestor "$tag" HEAD; then newrelease=yes; fi
+          # An empty tag list must not look like "a new release exists".
+          if [ -n "$tag" ] && ! git merge-base --is-ancestor "$tag" HEAD; then newrelease=yes; fi
           echo "new=$new" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "newrelease=$newrelease" >> "$GITHUB_OUTPUT"
@@ -85,26 +85,38 @@ jobs:
           echo "size=$size" >> "$GITHUB_OUTPUT"
       - name: Report
         if: steps.trial.outputs.action == 'merge'
+        # Values derived from upstream (tag and file names) go through env vars, never as expressions inside the script text.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MERGE: ${{ steps.trial.outputs.merge }}
+          CONFLICTS: ${{ steps.trial.outputs.conflicts }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          BUILD_SIZE: ${{ steps.build.outputs.size }}
+          BASE: ${{ steps.trial.outputs.base }}
+          NEW: ${{ steps.trial.outputs.new }}
+          TAG: ${{ steps.trial.outputs.tag }}
+          NEWREL: ${{ steps.trial.outputs.newrelease }}
         run: |
           set -uo pipefail
-          t='${{ steps.trial.outputs.merge }}'
-          if [ "$t" = "clean" ]; then
-            if [ '${{ steps.build.outcome }}' = "success" ]; then
-              result="merge clean, build OK (firmware.bin ${{ steps.build.outputs.size }} bytes of 6291456)"
+          if [ "$MERGE" = "clean" ]; then
+            if [ "$BUILD_OUTCOME" = "success" ]; then
+              result="merge clean, build OK (firmware.bin $BUILD_SIZE bytes of 6291456)"
             else
               result="merge clean but the BUILD FAILED"
             fi
           else
-            result="merge CONFLICTS in: ${{ steps.trial.outputs.conflicts }}"
+            result="merge CONFLICTS in: $CONFLICTS"
           fi
-          body="Upstream CrossPoint has moved since our base (${{ steps.trial.outputs.base }}).
-
-          - new upstream/develop commits: ${{ steps.trial.outputs.new }}
-          - latest upstream release tag: ${{ steps.trial.outputs.tag }} (newer than our branch: ${{ steps.trial.outputs.newrelease }})
-          - trial merge of upstream/develop into this branch: $result
-
-          Next: in the port repo run \`python3 tools/changes.py upstream --fetch\`, create the next \`diptyx-<release>\` branch, re-apply our patch stack, rebuild, then run the hardware checklist (CHANGES.md). Nothing was pushed by this job."
-          echo "$body" >> "$GITHUB_STEP_SUMMARY"
+          body=$(printf '%s\n' \
+            "Upstream CrossPoint has moved since our base ($BASE)." \
+            "" \
+            "- new upstream/develop commits: $NEW" \
+            "- latest upstream release tag: $TAG (newer than our branch: $NEWREL)" \
+            "- trial merge of upstream/develop into this branch: $result" \
+            "" \
+            'Next: in the port repo run `python3 tools/changes.py upstream --fetch`, create the next `diptyx-<release>` branch, re-apply our patch stack, rebuild, then run the hardware checklist (CHANGES.md). Nothing was pushed by this job.')
+          printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
           existing=$(gh issue list --state open --search "Upstream update in:title" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"

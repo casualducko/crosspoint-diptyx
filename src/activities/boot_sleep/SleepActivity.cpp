@@ -505,7 +505,11 @@ void SleepActivity::onEnter() {
   Activity::onEnter();
 
   // Diptyx: the right panel shows the stock idle image (or the cover card) while the left shows the sleep screen.
-  RightPanel::showSleepScreen(renderer, display);
+  if (BoardConfig::isDiptyx()) {
+    releaseSdFontCachesForDecode(
+        renderer);  // the idle image / cover decode needs the heap, like the left sleep screens
+    RightPanel::showSleepScreen(renderer, display);
+  }
 
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
@@ -649,9 +653,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
   if (!preserveBackground) renderer.clearScreen();
 
-  const bool hasGreyscale =
-      bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
-                                                          CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
+  // The Diptyx panels are black and white: skip the two gray plane renders (each re-reads the bitmap from the SD card).
+  const bool hasGreyscale = bitmap.hasGreyscale() && !BoardConfig::isDiptyx() &&
+                            (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
+                                                       CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
   if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, preserveBackground)) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);

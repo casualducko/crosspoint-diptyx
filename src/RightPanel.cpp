@@ -1,7 +1,7 @@
 #include "RightPanel.h"
 
-#include <BoardConfig.h>
 #include <Bitmap.h>
+#include <BoardConfig.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -14,8 +14,8 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <utility>
 #include <string>
+#include <utility>
 
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
@@ -23,8 +23,9 @@
 
 namespace {
 
-constexpr char IDLE_JPG[] = "/idle_screen_right.jpg";    // stock Diptyx idle image convention
+constexpr char IDLE_JPG[] = "/idle_screen_right.jpg";       // stock Diptyx idle image convention
 constexpr char IDLE_BMP[] = "/.crosspoint/idle_right.bmp";  // 1-bit conversion cache
+constexpr char IDLE_KEY[] = "/.crosspoint/idle_right.key";  // size of the JPEG the cache was made from
 
 // Identifies what the right panel currently shows. RTC memory survives deep sleep but not a power-off, so the card is
 // simply redrawn once after a cold boot.
@@ -100,7 +101,8 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
         const int boxW = w - 2 * margin;
         const int boxH = h - 190;
         // drawBitmap only scales down, so centre using the scaled size.
-        float scale = std::min(static_cast<float>(boxW) / bitmap.getWidth(), static_cast<float>(boxH) / bitmap.getHeight());
+        float scale =
+            std::min(static_cast<float>(boxW) / bitmap.getWidth(), static_cast<float>(boxH) / bitmap.getHeight());
         if (scale > 1.0f) scale = 1.0f;
         const int dw = static_cast<int>(bitmap.getWidth() * scale);
         const int dh = static_cast<int>(bitmap.getHeight() * scale);
@@ -125,17 +127,35 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
 // Draws the stock idle image into the framebuffer. False if there is no usable image.
 bool drawIdleImage(GfxRenderer& r) {
   if (!Storage.exists(IDLE_JPG)) return false;
-  if (!Storage.exists(IDLE_BMP)) {
+  // The conversion is cached, but must follow the JPEG: replacing idle_screen_right.jpg (a different size) has to
+  // regenerate it. The size of the source file is the cache key.
+  std::string jpgKey;
+  {
+    HalFile jpg;
+    if (!Storage.openFileForRead("RP", IDLE_JPG, jpg)) return false;
+    jpgKey = std::to_string(jpg.fileSize()) + ":" + std::to_string(jpg.modificationTime()) + ":" +
+             std::to_string(r.getScreenWidth()) + "x" + std::to_string(r.getScreenHeight());
+  }
+  std::string cachedKey;
+  const bool haveKey = Storage.exists(IDLE_KEY) && Storage.readFileToString("RP", IDLE_KEY, 96, cachedKey);
+  // A JPEG that failed to convert is remembered (":bad") so it is not retried on every sleep until the file changes.
+  if (haveKey && cachedKey == jpgKey + ":bad") return false;
+  const bool cacheValid = haveKey && Storage.exists(IDLE_BMP) && cachedKey == jpgKey;
+  if (!cacheValid) {
+    Storage.remove(IDLE_KEY);
     HalFile jpg;
     HalFile bmp;
     if (!Storage.openFileForRead("RP", IDLE_JPG, jpg) || !Storage.openFileForWrite("RP", IDLE_BMP, bmp)) return false;
-    const bool ok = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(jpg, bmp, r.getScreenWidth(), r.getScreenHeight());
+    const bool ok =
+        JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(jpg, bmp, r.getScreenWidth(), r.getScreenHeight());
     bmp.close();
     if (!ok) {
       Storage.remove(IDLE_BMP);
+      Storage.writeFile(IDLE_KEY, String((jpgKey + ":bad").c_str()));
       LOG_ERR("RP", "Could not convert %s", IDLE_JPG);
       return false;
     }
+    Storage.writeFile(IDLE_KEY, String(jpgKey.c_str()));  // written last: a half-written cache is never trusted
   }
   HalFile file;
   if (!Storage.openFileForRead("RP", IDLE_BMP, file)) return false;
@@ -148,9 +168,9 @@ bool drawIdleImage(GfxRenderer& r) {
 }
 
 template <typename DrawFn>
-void presentOnRight(GfxRenderer& r, HalDisplay& d, DrawFn&& draw) {
+bool presentOnRight(GfxRenderer& r, HalDisplay& d, DrawFn&& draw) {
   // Full waveform: the card / idle image sits there until the book changes.
-  RightPanel::present(r, d, std::forward<DrawFn>(draw), HalDisplay::HALF_REFRESH);
+  return RightPanel::present(r, d, std::forward<DrawFn>(draw), HalDisplay::HALF_REFRESH);
 }
 
 }  // namespace
@@ -166,8 +186,8 @@ void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display) {
 
   LOG_DBG("RP", "Cover card for %s", hasBook ? card.path.c_str() : "(no book)");
   if (hasBook) resolveCover(card);
-  presentOnRight(renderer, display, [&] { drawBookCard(renderer, card); });
-  shownKey = key;
+  // Only remember the card as shown if it really was (no memory to save the left frame: try again next visit).
+  if (presentOnRight(renderer, display, [&] { drawBookCard(renderer, card); })) shownKey = key;
 }
 
 void markDirty() { shownKey = 0; }

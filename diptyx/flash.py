@@ -11,7 +11,7 @@ the bootloader (0x0), the partition table (0x8000), your settings (NVS) or the b
 it refuses to run if the device's partition table is not the stock Diptyx one. Going back to the stock firmware
 is the same command with the stock app image (see README.md).
 
-Needs Python 3.8+ and esptool 5:  python -m pip install --upgrade "esptool>=5"
+Needs Python 3.10+ (esptool 5 requires it) and esptool 5:  python -m pip install --upgrade "esptool>=5"
 """
 import argparse
 import datetime
@@ -25,7 +25,7 @@ import tempfile
 import urllib.error
 import urllib.request
 
-REPO = "casualducko/crosspoint-diptyx"
+REPO = os.environ.get("DIPTYX_FLASH_REPO", "casualducko/crosspoint-diptyx")  # override to use a fork
 APP_OFFSET = 0x10000  # factory app slot of the stock Diptyx partition table
 APP_MAX = 6 * 1024 * 1024  # size of that slot
 FLASH_SIZE = 16 * 1024 * 1024
@@ -49,11 +49,25 @@ def die(msg, code=1):
     sys.exit(code)
 
 
-def esptool(*args, capture=False):
-    """Run esptool 5 as `python -m esptool ...`. Returns (returncode, combined output)."""
-    cmd = [sys.executable, "-m", "esptool", *args]
+def esptool(*args, capture=False, stay=False):
+    """Run esptool 5 as `python -m esptool ...`. Returns (returncode, combined output).
+
+    stay=True adds `--after no-reset` for READ-ONLY commands: the chip stays in the bootloader between steps. Without it
+    every command hard-resets the chip, which then boots the installed app (the stock firmware re-enumerates as another
+    USB device) and the next step can no longer find it. The final write keeps the default reset so the new app starts.
+    """
+    cmd = [sys.executable, "-m", "esptool"]
+    if stay:
+        # global options go before the sub-command: ... --chip X --port P --after no-reset <command>
+        i = len(args)
+        for k, a in enumerate(args):
+            if not a.startswith("-") and (k == 0 or args[k - 1] not in ("--chip", "--port", "--baud", "--after", "--before")):
+                i = k
+                break
+        args = (*args[:i], "--after", "no-reset", *args[i:])
+    cmd += list(args)
     if capture:
-        p = subprocess.run(cmd, capture_output=True, text=True)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     return subprocess.run(cmd).returncode, ""
 
@@ -105,26 +119,31 @@ def check_app_image(path):
     chip_id = int.from_bytes(head[12:14], "little")
     if chip_id != 9:
         die(f"{path} is built for another chip (chip id {chip_id}, expected 9 = ESP32-S3).")
+    with open(path, "rb") as f:
+        f.seek(32)
+        magic = int.from_bytes(f.read(4), "little")
+    if magic != 0xABCD5432:  # esp_app_desc_t: present in every ESP-IDF/Arduino application image, not in a bootloader
+        die(f"{path} does not look like an application image (no app descriptor). Is it a bootloader or partition image?")
     return size
 
 
 def preflight(port):
     """Read-only checks: it is an ESP32-S3 with 16 MB flash and the stock Diptyx partition table."""
     print(f"Checking the device on {port} (read-only)...")
-    rc, out = esptool("--chip", "esp32s3", "--port", port, "flash-id", capture=True)
+    rc, out = esptool("--chip", "esp32s3", "--port", port, "flash-id", capture=True, stay=True)
     if rc != 0:
         print(out[-600:])
         print(DOWNLOAD_MODE_HELP)
         die("Could not connect to the device.")
     if "ESP32-S3" not in out:
         die("This does not look like an ESP32-S3 device.")
-    m = re.search(r"Detected flash size:\s*(\d+)MB", out)
+    m = re.search(r"Detected flash size:\s*(\d+)\s*MB", out)
     if not m or int(m.group(1)) * 1024 * 1024 != FLASH_SIZE:
         die(f"Expected 16 MB of flash, found: {m.group(0) if m else 'unknown'}.")
     mac = re.search(r"MAC:\s*([0-9a-fA-F:]{17})", out)
     with tempfile.TemporaryDirectory() as tmp:
         pt = os.path.join(tmp, "ptable.bin")
-        rc, out2 = esptool("--chip", "esp32s3", "--port", port, "read-flash", hex(PTABLE_OFFSET), hex(PTABLE_LEN), pt, capture=True)
+        rc, out2 = esptool("--chip", "esp32s3", "--port", port, "read-flash", hex(PTABLE_OFFSET), hex(PTABLE_LEN), pt, capture=True, stay=True)
         if rc != 0:
             print(out2[-600:])
             die("Could not read the partition table.")
@@ -162,17 +181,25 @@ def fetch_latest(tmp):
     print(f"Looking up the latest release of {REPO} ...")
     try:
         rel = http_json(f"https://api.github.com/repos/{REPO}/releases/latest")
-    except (urllib.error.URLError, OSError) as e:
-        die(f"Could not reach GitHub ({e}). Download the *-app.bin from the Releases page and use --firmware.")
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        die(f"Could not get the latest release from GitHub ({e}). Download the *-app.bin and its .sha256 from the "
+            "Releases page and use --firmware.")
     assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
     app = next((n for n in assets if n.endswith("-app.bin")), None)
     if not app or app + ".sha256" not in assets:
         die("The latest release has no *-app.bin with a .sha256 file.")
     print(f"  release {rel.get('tag_name')}: {app}")
     bin_path, sha_path = os.path.join(tmp, app), os.path.join(tmp, app + ".sha256")
-    download(assets[app], bin_path)
-    download(assets[app + ".sha256"], sha_path)
-    expected = open(sha_path).read().split()[0].lower()
+    try:
+        download(assets[app], bin_path)
+        download(assets[app + ".sha256"], sha_path)
+        with open(sha_path) as f:
+            parts = f.read().split()
+    except (urllib.error.URLError, OSError) as e:
+        die(f"Download failed ({e}). Check your connection and try again.")
+    if not parts:
+        die("The checksum file in the release is empty.")
+    expected = parts[0].lower()
     if sha256_file(bin_path) != expected:
         die("Checksum mismatch: the download is corrupt. Try again.")
     print("  checksum OK")
@@ -183,7 +210,7 @@ def do_backup(port, mac, out=None):
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     out = out or f"diptyx-flash-backup-{(mac or 'device').replace(':', '')}-{stamp}.bin"
     print(f"Backing up the full 16 MB flash to {out} (about 2-3 minutes)...")
-    rc, _ = esptool("--chip", "esp32s3", "--port", port, "read-flash", "0", hex(FLASH_SIZE), out)
+    rc, _ = esptool("--chip", "esp32s3", "--port", port, "read-flash", "0", hex(FLASH_SIZE), out, stay=True)
     if rc != 0:
         die("Backup failed; nothing was changed on the device.")
     print(f"Backup saved: {out}\nKeep it private: it contains your device's settings.\nSHA-256 {sha256_file(out)}")
@@ -193,14 +220,26 @@ def do_backup(port, mac, out=None):
 def ask(question, default_yes=True, assume=None):
     if assume is not None:
         return assume
+    if not sys.stdin.isatty():
+        die("This needs a yes/no answer but input is not interactive. Run it in a terminal, or pass --yes "
+            "(and --no-backup to skip the backup).")
     suffix = " [Y/n] " if default_yes else " [y/N] "
-    ans = input(question + suffix).strip().lower()
+    try:
+        ans = input(question + suffix).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        die("Cancelled; nothing was written.")
     return default_yes if not ans else ans.startswith("y")
+
+
+def leave_bootloader(port):
+    """Read-only commands leave the chip in download mode; reset it so the installed app starts again."""
+    esptool("--chip", "esp32s3", "--port", port, "read-mac", capture=True)
 
 
 def cmd_check(args):
     port = find_port(args.port)
     ok, _ = preflight(port)
+    leave_bootloader(port)
     if not ok:
         print("  partition table: DIFFERENT from the stock Diptyx layout; flashing would be refused.")
         return 1
@@ -212,6 +251,7 @@ def cmd_backup(args):
     port = find_port(args.port)
     ok, mac = preflight(port)
     do_backup(port, mac, args.out)
+    leave_bootloader(port)
     return 0
 
 

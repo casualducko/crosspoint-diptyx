@@ -504,6 +504,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
     // Tilt page turn needs the QMI8658 IMU (X3).
     if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
+    // Two-page spread needs the Diptyx's second panel.
+    if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_TWO_PAGE_SPREAD);
     return v;
   }();
 

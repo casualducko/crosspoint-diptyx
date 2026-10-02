@@ -8,9 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
   group: diptyx-release
@@ -19,10 +17,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # creating the release
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -70,28 +71,43 @@ jobs:
           m['version'] = sys.argv[1]
           json.dump(m, open('site/manifest.json', 'w'), indent=2)
           PY
-          cat > release-notes.md <<NOTES
-          CrossPoint for the Diptyx, version ${ver} (app image, ${size} bytes).
-
-          **Easiest:** use the web flasher (Chrome/Edge) or the flash script, both described in the guide:
-          https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/diptyx/README.md
-
-          The \`*-app.bin\` file is only the app region (flashed at 0x10000); it is not a full-flash image. Verify it against the
-          \`.sha256\` file. Back up your device first. Unofficial; use at your own risk.
-          NOTES
+          # Notes are written with printf and explicit arguments so tag-derived text is never re-evaluated by the shell.
+          printf '%s\n' \
+            "CrossPoint for the Diptyx, version ${ver} (app image, ${size} bytes)." \
+            "" \
+            "**Easiest:** use the web flasher (Chrome/Edge) or the flash script, both described in the guide:" \
+            "https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/diptyx/README.md" \
+            "" \
+            'The `*-app.bin` file is only the app region (flashed at 0x10000); it is not a full-flash image. Verify it against the `.sha256` file. Back up your device first. Unofficial; use at your own risk.' \
+            > release-notes.md
       - uses: actions/upload-pages-artifact@v4
+        if: github.ref_type == 'tag'
         with:
           path: site
-      - name: Create the GitHub release
+      - name: Create or update the GitHub release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "CrossPoint for Diptyx ${GITHUB_REF_NAME#diptyx-v}" --notes-file release-notes.md --verify-tag
+          set -euo pipefail
+          # Tags containing rc / beta / dev are pre-releases, so "latest" (what flash.py downloads) never points at them.
+          flags=""
+          case "$GITHUB_REF_NAME" in *rc*|*beta*|*dev*) flags="--prerelease" ;; esac
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* $flags --title "CrossPoint for Diptyx ${GITHUB_REF_NAME#diptyx-v}" --notes-file release-notes.md --verify-tag
+          fi
 
   deploy-pages:
+    # Only a tagged release may replace the public web flasher; a manual run from a branch must never do that.
+    if: github.ref_type == 'tag'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

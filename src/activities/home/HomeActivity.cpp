@@ -302,7 +302,7 @@ void HomeActivity::freeCoverBuffer() {
 void HomeActivity::loop() {
   // Diptyx: once the left panel has drawn, show the current book on the right panel. Done here, not in render():
   // opening the book for its cover needs the main task's larger stack.
-  if (firstRenderDone && !rightPanelChecked) {
+  if (BoardConfig::isDiptyx() && firstRenderDone && !rightPanelChecked) {
     rightPanelChecked = true;
     RenderLock lock(*this);
     RightPanel::showCoverCardIfChanged(renderer, display);

@@ -23,16 +23,18 @@ void showSleepScreen(GfxRenderer& renderer, HalDisplay& display);
 
 // Run `draw` into the shared framebuffer and show the result on the right panel with `mode`, leaving the left panel's
 // frame (and the framebuffer contents) as they were. Returns false if there was no memory to save the left frame.
+// The card and idle image are always drawn in normal polarity; reader pages (keepInversion) follow the left panel's
+// night-mode state, because toggling it would mismatch the pair and force a full flash on every turn.
 template <typename DrawFn>
-bool present(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMode mode) {
+bool present(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMode mode, bool keepInversion = false) {
   if (!r.storeBwBuffer()) {
     LOG_ERR("RP", "No memory to save the left frame; skipping right panel");
     return false;
   }
   const auto orientation = r.getOrientation();
   r.setOrientation(GfxRenderer::Orientation::Portrait);
-  const bool wasInverted = d.isInverted();
-  if (wasInverted) d.setInverted(false);  // right-panel content is always normal polarity
+  const bool flipPolarity = d.isInverted() && !keepInversion;
+  if (flipPolarity) d.setInverted(false);
 
   draw();
 
@@ -40,7 +42,7 @@ bool present(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMo
   r.displayBuffer(mode);
   d.selectPanel(HalDisplay::Panel::Left);
 
-  if (wasInverted) d.setInverted(true);
+  if (flipPolarity) d.setInverted(true);
   r.setOrientation(orientation);
   r.restoreBwBuffer(/*resyncPanelBaseline=*/false);
   return true;
