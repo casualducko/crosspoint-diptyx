@@ -455,7 +455,7 @@ void SettingsActivity::toggleCurrentSetting() {
         // A full restart (splash, fresh heap), not the silent heap-defrag one. Settings are saved on every change;
         // the power latch is held through the reset by the Diptyx shutdown handler registered in setup().
         RenderLock lock;
-        GUI.drawPopup(renderer, tr(STR_RESTARTING_HINT));
+        GUI.drawPopup(renderer, tr(STR_RESTARTING));  // one-line popup: the long hint text does not fit
         delay(50);
         ESP.restart();
         break;
