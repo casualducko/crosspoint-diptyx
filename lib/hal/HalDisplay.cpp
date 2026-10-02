@@ -101,6 +101,15 @@ bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
+void HalDisplay::selectPanel(Panel panel) {
+  einkDisplay.selectPanel(panel == Panel::Right ? freeink::FreeInkDisplay::PanelSide::Right
+                                                : freeink::FreeInkDisplay::PanelSide::Left);
+}
+
+HalDisplay::Panel HalDisplay::activePanel() const {
+  return einkDisplay.activePanel() == freeink::FreeInkDisplay::PanelSide::Right ? Panel::Right : Panel::Left;
+}
+
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisplay.lendBuildStorage(sizeOut); }

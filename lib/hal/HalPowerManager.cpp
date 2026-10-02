@@ -66,7 +66,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   // Otherwise, no change needed
 }
 
-void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+void HalPowerManager::startDeepSleep(HalGPIO& gpio, bool powerOff) const {
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
   // doesn't hold power domains that interfere with USB-powered GPIO wake.
@@ -106,7 +106,11 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
     // drive below (same trap as the GPIO13 block above).
     gpio_hold_dis(g);
     pinMode(pin, OUTPUT);
-    digitalWrite(pin, HIGH);
+    // Diptyx power-off: dropping the latch cuts the battery rail (the display is already asleep and the SD is
+    // prepared); the physical power button re-energizes it. With USB attached the board stays powered and
+    // still wakes from the buttons below.
+    const bool dropLatch = powerOff && BoardConfig::isDiptyx() && pin == BoardConfig::ACTIVE.power.latch0;
+    digitalWrite(pin, dropLatch ? LOW : HIGH);
     gpio_hold_en(g);
   }
 

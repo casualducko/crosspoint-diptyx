@@ -40,7 +40,9 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
-  void startDeepSleep(HalGPIO& gpio) const;
+  // powerOff (Diptyx only): also release the GPIO38 power latch so a battery-powered board really powers off; the
+  // physical power button then cold-boots it. Without it the latch stays held and only the seven buttons wake it.
+  void startDeepSleep(HalGPIO& gpio, bool powerOff = false) const;
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;

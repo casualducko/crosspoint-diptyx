@@ -334,7 +334,8 @@ static void deliverSleepPluginEvents() {
 }
 
 // Enter deep sleep mode
-void enterDeepSleep(bool fromTimeout = false) {
+// powerOff: Diptyx only, release the power latch (see HalPowerManager::startDeepSleep()).
+void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
@@ -378,7 +379,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   Storage.prepareForDeepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio);
+  powerManager.startDeepSleep(gpio, powerOff);
 }
 
 void setupDisplayAndFonts(bool seamless = false) {
@@ -835,7 +836,9 @@ void loop() {
       return;
     }
     LOG_DBG("MAIN", "Power button held %lums, sleeping", gpio.getPowerButtonHeldTime());
-    enterDeepSleep();
+    // Diptyx: a held power button powers the board off (the power button can't wake deep sleep; it re-energizes
+    // the rail instead). The idle timeout and menu sleep keep the standby path, woken by the seven buttons.
+    enterDeepSleep(false, BoardConfig::isDiptyx());
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }

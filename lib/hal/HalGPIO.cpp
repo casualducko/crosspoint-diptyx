@@ -195,7 +195,10 @@ bool HalGPIO::verifyPowerButtonWakeup() {
   // wheel click, so a click wake is always released before this samples and
   // verification would re-sleep on every wake. Its wheel has hard external
   // pull-ups, so the ghost-wake debounce this implements is not needed.
-  if (BoardConfig::isPaperMono() || BoardConfig::isM5PaperV11() || BoardConfig::ACTIVE.input.power < 0) {
+  // Diptyx: deep sleep wakes on any of seven buttons (the power button GPIO42 cannot wake it), so there is no
+  // power-button level to verify.
+  if (BoardConfig::isPaperMono() || BoardConfig::isM5PaperV11() || BoardConfig::isDiptyx() ||
+      BoardConfig::ACTIVE.input.power < 0) {
     return true;
   }
 

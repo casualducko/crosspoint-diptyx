@@ -75,6 +75,12 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
+  // Dual-panel boards (Diptyx): which physical panel the next displayBuffer() drives. Render into the shared
+  // framebuffer, refresh, then switch. No-op on other boards.
+  enum class Panel : uint8_t { Left, Right };
+  void selectPanel(Panel panel);
+  Panel activePanel() const;
+
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 
