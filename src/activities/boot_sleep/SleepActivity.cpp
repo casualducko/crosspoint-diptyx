@@ -23,6 +23,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "RightPanel.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -502,6 +503,9 @@ void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+
+  // Diptyx: the right panel shows the stock idle image (or the cover card) while the left shows the sleep screen.
+  RightPanel::showSleepScreen(renderer, display);
 
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||

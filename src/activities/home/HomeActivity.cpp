@@ -22,6 +22,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "RightPanel.h"
 #include "activities/plugins/PluginCatalogActivity.h"  // anyPluginInstalled()
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -299,6 +300,13 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  // Diptyx: once the left panel has drawn, show the current book on the right panel. Done here, not in render():
+  // opening the book for its cover needs the main task's larger stack.
+  if (firstRenderDone && !rightPanelChecked) {
+    rightPanelChecked = true;
+    RenderLock lock(*this);
+    RightPanel::showCoverCardIfChanged(renderer, display);
+  }
   const int menuCount = getMenuItemCount();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
