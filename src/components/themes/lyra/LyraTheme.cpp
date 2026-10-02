@@ -172,6 +172,10 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   if (gpio.hasTouch()) {
     return;
   }
+  // Diptyx has no side buttons (its joystick up/down still act as the Up/Down keys): draw no side hints.
+  if (BoardConfig::isDiptyx()) {
+    return;
+  }
 
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = LyraMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
