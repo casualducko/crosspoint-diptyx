@@ -1,4 +1,4 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/Free-Ink/freeink-sdk.git
-	branch = main
+	url = https://github.com/casualducko/freeink-sdk.git
+	branch = diptyx-1.6.5
