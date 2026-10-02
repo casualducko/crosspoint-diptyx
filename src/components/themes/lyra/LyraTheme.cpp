@@ -331,11 +331,23 @@ void LyraTheme::drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) c
 void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
+  int rowHeight = LyraMetrics::values.menuRowHeight;
+  int rowSpacing = LyraMetrics::values.menuSpacing;
+  // The rows are designed for an 800 px tall portrait screen. On a shorter panel (the Diptyx is 648 px) a fifth entry
+  // would run under the button hints, so tighten the rows to what fits above them. Screens that already fit are
+  // untouched.
+  constexpr int kHintsClearance = 6;
+  constexpr int kMinSpacing = 4;
+  constexpr int kMinRowHeight = 36;
+  const int available = renderer.getScreenHeight() - LyraMetrics::values.buttonHintsHeight - kHintsClearance - rect.y;
+  if (buttonCount > 1 && buttonCount * rowHeight + (buttonCount - 1) * rowSpacing > available) {
+    rowSpacing = std::min(rowSpacing, kMinSpacing);
+    rowHeight = std::max(kMinRowHeight, (available - (buttonCount - 1) * rowSpacing) / buttonCount);
+  }
   for (int i = 0; i < buttonCount; ++i) {
     int tileWidth = rect.width - LyraMetrics::values.contentSidePadding * 2;
-    Rect tileRect = Rect{rect.x + LyraMetrics::values.contentSidePadding,
-                         rect.y + i * (LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing), tileWidth,
-                         LyraMetrics::values.menuRowHeight};
+    Rect tileRect = Rect{rect.x + LyraMetrics::values.contentSidePadding, rect.y + i * (rowHeight + rowSpacing),
+                         tileWidth, rowHeight};
 
     const bool selected = selectedIndex == i;
 
@@ -347,7 +359,7 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const char* label = labelStr.c_str();
     int textX = tileRect.x + 16;
     const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int textY = tileRect.y + (LyraMetrics::values.menuRowHeight - lineHeight) / 2;
+    const int textY = tileRect.y + (rowHeight - lineHeight) / 2;
 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
