@@ -180,7 +180,12 @@ class EpubReaderActivity final : public ReaderActivity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
-  void renderStatusBar() const;
+  // pageOffset: draw the status bar for the page that many places after the current one (the spread's right page).
+  void renderStatusBar(int pageOffset = 0) const;
+  // Diptyx two-page spread: left panel = page N (N even), right panel = page N+1. Page turns advance by two.
+  bool spreadActive() const;
+  void renderSpreadRightPage(int marginTop, int marginLeft, bool leftWasFull);
+  uint32_t rightPageKey = 0;  // what the right panel currently shows (see renderSpreadRightPage)
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;
   // The orientation the current layout was built for. The control center's

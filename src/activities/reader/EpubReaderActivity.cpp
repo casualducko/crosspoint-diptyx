@@ -1,5 +1,6 @@
 #include "EpubReaderActivity.h"
 
+#include <BoardConfig.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
@@ -40,6 +41,7 @@
 #include "ReaderFontSizes.h"
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
+#include "../../RightPanel.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -1099,9 +1101,10 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     RenderLock lock;
     clearDeferredReposition();
   }
+  const int step = spreadActive() ? 2 : 1;  // a spread shows two pages, so a turn moves two
   if (isForwardTurn) {
-    if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
-      section->currentPage++;
+    if (section->currentPage + step < static_cast<int>(section->pageCount) || section->isBuilding()) {
+      section->currentPage += step;
       lastPageTurnTime = millis();
       return true;
     } else if (currentSpineIndex + 1 < epub->getSpineItemsCount()) {
@@ -1118,7 +1121,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     }
   } else {
     if (section->currentPage > 0) {
-      section->currentPage--;
+      section->currentPage = std::max(0, section->currentPage - step);
       lastPageTurnTime = millis();
       return true;
     } else if (currentSpineIndex > 0) {
@@ -1493,6 +1496,9 @@ void EpubReaderActivity::renderBook() {
 
   applyDeferredReposition();
 
+  // Spread pages are (0,1), (2,3), ...: keep the left page even whatever put us here (resume, jump, setting toggled).
+  if (spreadActive() && (section->currentPage & 1) && section->currentPage > 0) section->currentPage--;
+
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
@@ -1553,10 +1559,14 @@ void EpubReaderActivity::renderBook() {
     discardOverlayPage();
 
     const auto start = millis();
+    const bool leftRefreshIsFull = pagesUntilFullRefresh <= 1;  // renderContents() applies the same rule
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
+    if (spreadActive() && overlay == Overlay::None) {
+      renderSpreadRightPage(orientedMarginTop, orientedMarginLeft, leftRefreshIsFull);
+    }
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
@@ -1687,7 +1697,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  // Skip the anti-aliasing passes on B/W-only panels (Diptyx): they would only cost render time.
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing && renderer.grayscaleCapabilities().supported();
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   const bool absoluteImageGrayscale = pageHasImages && !gpio.deviceIsX3() &&
                                       display.getController() == HalDisplay::Controller::UC8279 &&
@@ -1907,8 +1918,53 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 }
 
-void EpubReaderActivity::renderStatusBar() const {
-  const int currentPage = section ? section->currentPage + 1 : 1;
+bool EpubReaderActivity::spreadActive() const {
+  return BoardConfig::isDiptyx() && SETTINGS.twoPageSpread && SETTINGS.orientation == CrossPointSettings::PORTRAIT;
+}
+
+// Draws page N+1 on the right panel (blank when the chapter has no such page). The left panel's frame in the shared
+// framebuffer is saved and restored around it, so the menu overlay and re-renders still see the left page.
+void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int marginLeft, const bool leftWasFull) {
+  if (!section) return;
+  const int n = section->currentPage + 1;
+  const bool pageExists = n < static_cast<int>(section->pageCount);
+  const int fontId = SETTINGS.getReaderFontId();
+
+  // Skip the panel refresh when nothing about the right page changed (e.g. the menu overlay opened and closed).
+  uint32_t key = 2166136261u;
+  for (const uint32_t v : {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n),
+                           static_cast<uint32_t>(pageExists), static_cast<uint32_t>(section->pageCount),
+                           static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin)}) {
+    key = (key ^ v) * 16777619u;
+  }
+  if (key == 0) key = 1;
+  if (key == rightPageKey && !leftWasFull) return;
+
+  std::unique_ptr<Page> rightPage;
+  if (pageExists) rightPage = section->loadPage(n);
+
+  const auto draw = [&] {
+    renderer.clearScreen();
+    if (!rightPage) return;
+    // Same two-pass sequence as renderContents(): scan for glyphs, prewarm, then the real draw.
+    auto* fcm = renderer.getFontCacheManager();
+    auto scope = fcm->createPrewarmScope();
+    rightPage->render(renderer, fontId, marginLeft, marginTop);
+    renderStatusBar(1);
+    scope.endScanAndPrewarm();
+    renderer.clearScreen();
+    rightPage->render(renderer, fontId, marginLeft, marginTop);
+    renderStatusBar(1);
+  };
+
+  if (RightPanel::present(renderer, display, draw, leftWasFull ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH)) {
+    rightPageKey = key;
+    RightPanel::markDirty();  // the home screen must redraw its card after reading
+  }
+}
+
+void EpubReaderActivity::renderStatusBar(const int pageOffset) const {
+  const int currentPage = section ? section->currentPage + 1 + pageOffset : 1;
   const float pageCount = section ? section->estimatedTotalPages() : 1;
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
   const float bookProgress = epub ? (epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100) : 0;
