@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
+#include "RightPanel.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -64,6 +65,7 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 }
 
 void ActivityManager::renderTaskLoop() {
+  bool rightPanelInverted = SETTINGS.screenInverted != 0;
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
@@ -74,6 +76,11 @@ void ActivityManager::renderTaskLoop() {
       // Night mode is a global output polarity applied to every activity.
       // The sleep screen forces normal polarity itself (SleepActivity).
       display.setInverted(SETTINGS.screenInverted != 0);
+      if (BoardConfig::isDiptyx() && (SETTINGS.screenInverted != 0) != rightPanelInverted) {
+        // Night mode was toggled: the Diptyx's right-panel card follows it at once (a reader page does so itself).
+        rightPanelInverted = SETTINGS.screenInverted != 0;
+        RightPanel::refreshCardPolarity(renderer, display);
+      }
       currentActivity->render(std::move(lock));
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.

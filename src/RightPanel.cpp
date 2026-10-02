@@ -43,6 +43,10 @@ struct BookCard {
   std::string author;
   std::string coverBmpPath;  // empty when the cover could not be produced
 };
+// The card last drawn, so a night-mode change can redraw it without reopening the book (RAM only: after a wake the
+// key is cleared anyway).
+BookCard shownCard;
+bool shownCardValid = false;
 
 // The current book: the open one, else the most recent. Returns false when there is none.
 bool currentBook(BookCard& card) {
@@ -168,9 +172,15 @@ bool drawIdleImage(GfxRenderer& r) {
 }
 
 template <typename DrawFn>
-bool presentOnRight(GfxRenderer& r, HalDisplay& d, DrawFn&& draw) {
-  // Full waveform: the card / idle image sits there until the book changes.
-  return RightPanel::present(r, d, std::forward<DrawFn>(draw), HalDisplay::HALF_REFRESH);
+bool presentOnRight(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, bool followNightMode = false) {
+  // Full waveform: the card / idle image sits there until the book (or the polarity) changes.
+  return RightPanel::present(r, d, std::forward<DrawFn>(draw), HalDisplay::HALF_REFRESH, followNightMode);
+}
+
+// Cache key of a card: the book plus the polarity it was drawn in.
+uint32_t cardKey(bool hasBook, const std::string& path, bool inverted) {
+  const uint32_t key = (hasBook ? hashString(path) : 1u) ^ (inverted ? 0x9E3779B9u : 0u);
+  return key ? key : 1u;
 }
 
 }  // namespace
@@ -181,13 +191,27 @@ void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;
   BookCard card;
   const bool hasBook = currentBook(card);
-  const uint32_t key = hasBook ? hashString(card.path) : 1;
+  const uint32_t key = cardKey(hasBook, card.path, display.isInverted());
   if (key == shownKey) return;
 
   LOG_DBG("RP", "Cover card for %s", hasBook ? card.path.c_str() : "(no book)");
   if (hasBook) resolveCover(card);
   // Only remember the card as shown if it really was (no memory to save the left frame: try again next visit).
-  if (presentOnRight(renderer, display, [&] { drawBookCard(renderer, card); })) shownKey = key;
+  if (presentOnRight(renderer, display, [&] { drawBookCard(renderer, card); }, /*followNightMode=*/true)) {
+    shownKey = key;
+    shownCard = card;
+    shownCardValid = true;
+  }
+}
+
+void refreshCardPolarity(GfxRenderer& renderer, HalDisplay& display) {
+  if (!BoardConfig::isDiptyx() || shownKey == 0 || !shownCardValid) return;
+  const bool hasBook = !shownCard.path.empty();
+  const uint32_t key = cardKey(hasBook, shownCard.path, display.isInverted());
+  if (key == shownKey) return;
+  if (presentOnRight(renderer, display, [&] { drawBookCard(renderer, shownCard); }, /*followNightMode=*/true)) {
+    shownKey = key;
+  }
 }
 
 void markDirty() { shownKey = 0; }

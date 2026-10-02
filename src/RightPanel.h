@@ -10,9 +10,13 @@
 // left frame back, so the left activity is unaffected.
 namespace RightPanel {
 
-// Home screen: show a card for the current book (cover when it can be decoded, otherwise title and author). Skips the
-// refresh when the panel already shows this book's card.
+// Home screen: show a card for the current book (cover when it can be decoded, otherwise title and author), following
+// night mode. Skips the refresh when the panel already shows this book's card in the current polarity.
 void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display);
+
+// The left panel's night-mode setting changed: if the right panel currently shows the home card, redraw it in the new
+// polarity right away (no-op when it shows a reader page, the idle image, or nothing known).
+void refreshCardPolarity(GfxRenderer& renderer, HalDisplay& display);
 
 // The right panel now shows something else (a reader page): make the home screen redraw its card next time.
 void markDirty();
@@ -23,8 +27,9 @@ void showSleepScreen(GfxRenderer& renderer, HalDisplay& display);
 
 // Run `draw` into the shared framebuffer and show the result on the right panel with `mode`, leaving the left panel's
 // frame (and the framebuffer contents) as they were. Returns false if there was no memory to save the left frame.
-// The card and idle image are always drawn in normal polarity; reader pages (keepInversion) follow the left panel's
-// night-mode state, because toggling it would mismatch the pair and force a full flash on every turn.
+// By default the content is drawn in normal polarity (the sleep screen and idle image, like CrossPoint's own sleep
+// screens); with keepInversion it follows the left panel's night-mode state (reader pages, and the home card), because
+// toggling it would mismatch the pair and force a full flash on every turn.
 template <typename DrawFn>
 bool present(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMode mode, bool keepInversion = false) {
   if (!r.storeBwBuffer()) {
