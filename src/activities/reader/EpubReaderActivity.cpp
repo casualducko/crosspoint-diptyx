@@ -1570,7 +1570,9 @@ void EpubReaderActivity::renderBook() {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
-    if (spreadActive() && overlay == Overlay::None) {
+    // Also while the menu overlay is open: a change made from it (night mode, text settings) must reach the right
+    // page now, not when the menu closes. An unchanged right page is skipped by its key.
+    if (spreadActive()) {
       renderSpreadRightPage(orientedMarginTop, orientedMarginLeft, leftRefreshIsFull);
     }
   }
@@ -1939,9 +1941,10 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
 
   // Skip the panel refresh when nothing about the right page changed (e.g. the menu overlay opened and closed).
   uint32_t key = 2166136261u;
-  for (const uint32_t v : {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n),
-                           static_cast<uint32_t>(pageExists), static_cast<uint32_t>(section->pageCount),
-                           static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin)}) {
+  for (const uint32_t v :
+       {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n), static_cast<uint32_t>(pageExists),
+        static_cast<uint32_t>(section->pageCount), static_cast<uint32_t>(fontId),
+        static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(display.isInverted())}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
