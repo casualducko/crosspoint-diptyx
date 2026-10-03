@@ -354,6 +354,10 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
+  // Diptyx: the grey cover tile shows page ghosting after a book, so leaving a reader repaints home with a full refresh.
+  if (BoardConfig::isDiptyx() && currentActivity && (currentActivity->name == "EpubReader" || currentActivity->name == "XtcReader")) {
+    cleanInitialRefresh = true;
+  }
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
