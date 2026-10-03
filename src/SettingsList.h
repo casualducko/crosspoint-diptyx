@@ -319,6 +319,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Toggle(StrId::STR_SHOW_STATUS_BAR, &CrossPointSettings::statusBarEnabled, "statusBarEnabled",
+                            StrId::STR_CAT_READER),
         SettingInfo::Toggle(StrId::STR_TWO_PAGE_SPREAD, &CrossPointSettings::twoPageSpread, "twoPageSpread",
                             StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,

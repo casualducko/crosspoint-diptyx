@@ -228,6 +228,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
   // Status bar settings
+  uint8_t statusBarEnabled = 1;  // master switch: 0 hides the whole reader status bar, whatever the items below say
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
   uint8_t statusBarProgressBar = HIDE_PROGRESS;

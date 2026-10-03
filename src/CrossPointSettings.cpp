@@ -286,6 +286,7 @@ void CrossPointSettings::applyTextRendering() const {
 
 CrossPointSettings::StatusBarSpec CrossPointSettings::statusBarSpec() const {
   StatusBarSpec spec;
+  if (!statusBarEnabled) return spec;  // a default spec shows nothing and takes no room
   spec.showChapterPageCount = statusBarChapterPageCount != 0;
   spec.showBookProgressPercent = statusBarBookProgressPercentage != 0;
   spec.titleMode = statusBarTitle;
