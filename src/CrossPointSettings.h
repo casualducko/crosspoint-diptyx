@@ -266,6 +266,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Diptyx only: show two consecutive pages, one on each panel (left = page N, right = page N+1).
   uint8_t twoPageSpread = 1;
+  // Diptyx only: what the right panel shows while the device sleeps.
+  enum RIGHT_SLEEP_SCREEN { RIGHT_SLEEP_IDLE_IMAGE = 0, RIGHT_SLEEP_TITLE_AUTHOR = 1, RIGHT_SLEEP_SCREEN_COUNT };
+  uint8_t rightSleepScreen = RIGHT_SLEEP_TITLE_AUTHOR;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // X4 Pro: double-click power toggles the frontlight. Disabling frees the

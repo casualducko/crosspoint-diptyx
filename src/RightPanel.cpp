@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 
+#include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
 #include "fontIds.h"
@@ -130,6 +131,23 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
     int y = h / 2 - 90;
     drawCentered(r, UI_12_FONT_ID, card.title.empty() ? "CrossPoint" : card.title, y, 4, textWidth);
     y += 16;
+    drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
+  }
+}
+
+// A quiet sleep layout: the title in a serif face with the author below a short rule, on plain white, a little above
+// the vertical middle.
+void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
+  const int w = r.getScreenWidth();
+  const int h = r.getScreenHeight();
+  r.clearScreen();
+  const int textWidth = w - 140;
+  int y = h * 38 / 100;
+  drawCentered(r, NOTOSERIF_14_FONT_ID, card.title, y, 4, textWidth);
+  if (!card.author.empty()) {
+    y += 14;
+    r.drawLine(w / 2 - 22, y, w / 2 + 22, y, true);
+    y += 22;
     drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
   }
 }
@@ -265,7 +283,14 @@ void showSleepScreen(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;
   bool idleDrawn = false;
   BookCard card;
+  // Title & Author needs a current book with a title; otherwise this falls back to the idle image or the card.
+  const bool quiet = SETTINGS.rightSleepScreen == CrossPointSettings::RIGHT_SLEEP_TITLE_AUTHOR && currentBook(card) &&
+                     !card.title.empty();
   presentOnRight(renderer, display, [&] {
+    if (quiet) {
+      drawQuietTitle(renderer, card);
+      return;
+    }
     idleDrawn = drawIdleImage(renderer);
     if (!idleDrawn && currentBook(card)) {
       resolveCover(card);
