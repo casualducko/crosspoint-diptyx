@@ -26,6 +26,8 @@
 namespace {
 
 constexpr char IDLE_JPG[] = "/idle_screen_right.jpg";       // stock Diptyx idle image convention
+// Cover box height on the 480x648 card (screen height minus the title area).
+constexpr int kCoverBoxHeight = 458;
 constexpr char IDLE_BMP[] = "/.crosspoint/idle_right.bmp";  // 1-bit conversion cache
 constexpr char IDLE_KEY[] = "/.crosspoint/idle_right.key";  // size of the JPEG the cache was made from
 
@@ -77,7 +79,12 @@ void resolveCover(BookCard& card) {
     if (epub.load(true, true)) {
       if (card.title.empty()) card.title = epub.getTitle();
       if (card.author.empty()) card.author = epub.getAuthor();
-      if (epub.generateCoverBmp(false, false)) card.coverBmpPath = epub.getCoverBmpPath(false, false);
+      // The panel has no grayscale, so a 1-bit dithered cover sized to the card beats thresholding the 2-bit one.
+      if (epub.generateThumbBmp(kCoverBoxHeight)) {
+        card.coverBmpPath = epub.getThumbBmpPath(kCoverBoxHeight);
+      } else if (epub.generateCoverBmp(false, false)) {
+        card.coverBmpPath = epub.getCoverBmpPath(false, false);
+      }
     }
   }
 }
