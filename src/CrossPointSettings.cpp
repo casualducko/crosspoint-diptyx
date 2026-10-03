@@ -1,5 +1,7 @@
 #include "CrossPointSettings.h"
 
+#include <BoardConfig.h>
+#include <GlyphBitmap.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
@@ -271,9 +273,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     requestResave();
   }
 
+  applyTextRendering();
   LOG_DBG("CPS", "Settings loaded from file");
 
   return true;
+}
+
+void CrossPointSettings::applyTextRendering() const {
+  // Sharp: paint only dark gray and black (a 50% threshold). Standard: every non-white shade, as upstream does.
+  glyphBitmap::bwTwoBitLevels = (BoardConfig::isDiptyx() && textSharpness == TEXT_SHARP) ? 0x0c : 0x0e;
 }
 
 CrossPointSettings::StatusBarSpec CrossPointSettings::statusBarSpec() const {

@@ -91,13 +91,18 @@ __attribute__((always_inline)) inline void paint(uint8_t* buffer, int destinatio
 //   both grays, LSB paints dark gray only. 1bpp glyphs paint ink with state on
 //   every plane.
 // Clipping happens before pixel decoding, so fully hidden glyphs cost nothing.
+// Which 2bpp values the BW plane paints, as a bit mask over the values 0-3 (bit n = value n). 0x0e (every non-white shade)
+// is right when gray passes follow and lighten the edges. On a black-and-white-only panel those light shades stay black
+// and fatten every stroke, so the Diptyx can raise it to 0x0c (dark gray and black only: a 50% threshold).
+inline uint8_t bwTwoBitLevels = 0x0e;
+
 inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, Plane plane, bool state,
                  const Target& target, Clip clip) {
   // Bit n of levels set means source value n is painted.
   uint8_t levels = 0x02;
   bool clearBits = state;
   if (twoBit) {
-    levels = plane == Plane::BW ? 0x0e : plane == Plane::GrayMSB ? 0x06 : 0x04;
+    levels = plane == Plane::BW ? bwTwoBitLevels : plane == Plane::GrayMSB ? 0x06 : 0x04;
     if (plane != Plane::BW) clearBits = false;
   }
 
