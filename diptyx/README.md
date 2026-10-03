@@ -12,7 +12,7 @@ project. Use it at your own risk; you can always go back to the stock firmware (
 - The **right screen** shows the cover/title card of your current book on the home screen, and your own
   `idle_screen_right.jpg` (the same file the stock firmware uses) while the device sleeps.
 - **Crisp text on a black-and-white panel:** the built-in reading font is **Literata, mono-hinted** (10 to 18 pt, 10 pt by default), and
-  the optional [font pack](fonts/README.md) adds more mono-hinted families (Vollkorn, Bitter, ChareInk, Crimson Pro, Inter, Atkinson
+  the optional [font pack](fonts/README.md) adds more mono-hinted families (Source Serif 4, Spectral, Bitter, ChareInk, Crimson Pro, Inter, Atkinson
   Hyperlegible Next, Noto Sans and a dyslexia-friendly face).
 - Black-and-white rendering tuned for the Diptyx panels, standby and real power-off, battery level, USB mass storage (use the SD card
   like a USB drive).

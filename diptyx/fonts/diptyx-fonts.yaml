@@ -1,7 +1,7 @@
 # Diptyx font pack: mono-hinted SD-card reader fonts curated for the Diptyx panels (~138 ppi), built with
 # lib/EpdFont/scripts/build-sd-fonts.py (see diptyx/fonts/README.md). All families are under the SIL Open Font License 1.1
 # (licenses/). `mono: true` builds with --mono: monochrome-hinted glyphs at a whole-pixel size with whole-pixel advances.
-# Families whose licence reserves their name (Merriweather, Gentium, IBM Plex, OpenDyslexic) are not shipped under that name:
+# Families whose licence reserves their name (Merriweather, Gentium, IBM Plex, OpenDyslexic, Lora, Libre Baskerville) are not shipped under that name:
 # the OFL counts a format conversion as a Modified Version, which may not use a Reserved Font Name.
 scriptGroups:
 - tag: latin
@@ -51,37 +51,6 @@ families:
       url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Italic.ttf
     bolditalic:
       url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-BoldItalic.ttf
-  mono: true
-- name: VollkornMono
-  description: A serif for bread and butter use by Friedrich Althausen (Latin, Greek, Cyrillic) - mono-hinted
-  scripts:
-  - latin
-  - cyrillic
-  - greek
-  intervals: latin-ext,greek,cyrillic,ipa-chars
-  sizes:
-  - 10
-  - 12
-  - 14
-  - 16
-  - 18
-  styles:
-    regular:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf
-      variable:
-        wght: 400
-    bold:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf
-      variable:
-        wght: 700
-    italic:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn-Italic%5Bwght%5D.ttf
-      variable:
-        wght: 400
-    bolditalic:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn-Italic%5Bwght%5D.ttf
-      variable:
-        wght: 700
   mono: true
 - name: BitterMono
   description: Slab serif designed for e-ink (Latin, Cyrillic) - mono-hinted
@@ -163,6 +132,63 @@ families:
       url: https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro-Italic%5Bwght%5D.ttf
       variable:
         wght: 700
+  mono: true
+- name: SourceSerif4Mono
+  description: Adobe's text serif, sturdy stems (Latin, Greek, Cyrillic) - mono-hinted
+  scripts:
+  - latin
+  - cyrillic
+  - greek
+  intervals: latin-ext,greek,cyrillic,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 400
+        opsz: 14
+    bold:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 700
+        opsz: 14
+    italic:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4-Italic%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 400
+        opsz: 14
+    bolditalic:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4-Italic%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 700
+        opsz: 14
+  mono: true
+- name: SpectralMono
+  description: Elegant screen-first serif (Latin, Cyrillic) - mono-hinted
+  scripts:
+  - latin
+  - cyrillic
+  intervals: latin-ext,cyrillic
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/spectral/Spectral-Regular.ttf
+    bold:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/spectral/Spectral-Bold.ttf
+    italic:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/spectral/Spectral-Italic.ttf
+    bolditalic:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/spectral/Spectral-BoldItalic.ttf
   mono: true
 - name: AtkinsonHyperlegibleNextMono
   description: Accessibility font for low vision (Latin) - mono-hinted

@@ -1,6 +1,6 @@
 # Diptyx font pack
 
-Nine reader font families, all **mono-hinted** and prebuilt as CrossPoint SD-card fonts (`.cpfont`, format version 4) at 10, 12, 14,
+Ten reader font families, all **mono-hinted** and prebuilt as CrossPoint SD-card fonts (`.cpfont`, format version 4) at 10, 12, 14,
 16 and 18 pt (about 30 MB for everything; copy only what you want). The firmware also has **Literata Mono built in at 10 to 18 pt** (its
 serif family), and 10 pt is the stock reading size, so nothing here is needed to get crisp text; this pack adds more families.
 
@@ -14,7 +14,8 @@ crisp. Diagonals and curls are still stair-stepped (the panel is about 138 ppi);
 | Family | Kind | Notes |
 |---|---|---|
 | **Literata Mono** | serif | The stock font. Screen-optimized, solid stems. Latin, Greek, Cyrillic. |
-| **Vollkorn Mono** | serif | Sturdy, warm book face. |
+| **Source Serif 4 Mono** | serif | Adobe text serif; wide, sturdy stems. |
+| **Spectral Mono** | serif | Elegant screen-first serif, a little lighter than Literata. |
 | **Bitter Mono** | slab serif | Made for screens. Latin, Cyrillic. |
 | **ChareInk Mono** | serif | An e-ink tuned face based on Charis SIL, from the CrossInk project. |
 | **Crimson Pro Mono** | serif | Elegant old-style serif. Latin. |
