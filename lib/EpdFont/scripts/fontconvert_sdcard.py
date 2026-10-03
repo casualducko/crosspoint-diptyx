@@ -580,12 +580,20 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     # load_glyph() with FT_LOAD_RENDER renders at the active size, so calling
     # it before set_char_size() would waste work at the default size and risk
     # Invalid_Size_Handle on some fonts.
-    face.set_char_size(size << 6, size << 6, 150, 150)
+    if mono:
+        # A whole-pixel em size, so the hinter fits stems to the pixel grid exactly (a fractional ppem such as 20.83
+        # is hinted at a rounded size anyway and the shapes drift from the grid).
+        face.set_pixel_sizes(0, int(round(size * 150.0 / 72.0)))
+    else:
+        face.set_char_size(size << 6, size << 6, 150, 150)
     ligature_glyph_indices = extract_ligature_glyph_indices_fonttools(fontfile)
     fallback_face = None
     if fallback_fontfile:
         fallback_face = freetype.Face(fallback_fontfile)
-        fallback_face.set_char_size(size << 6, size << 6, 150, 150)
+        if mono:
+            fallback_face.set_pixel_sizes(0, int(round(size * 150.0 / 72.0)))
+        else:
+            fallback_face.set_char_size(size << 6, size << 6, 150, 150)
 
     load_flags = freetype.FT_LOAD_RENDER
     if force_autohint:
@@ -733,7 +741,7 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     print(f"  [{style_label}] Bitmap: {total_bitmap_size} bytes ({total_bitmap_size / 1024:.1f} KB)", file=sys.stderr)
 
     # --- Extract kerning and ligatures ---
-    ppem = size * 150.0 / 72.0
+    ppem = float(round(size * 150.0 / 72.0)) if mono else size * 150.0 / 72.0
     all_cps = set(g.code_point for g, _ in all_glyphs)
 
     kern_map = extract_kerning_fonttools(fontfile, all_cps, ppem)
