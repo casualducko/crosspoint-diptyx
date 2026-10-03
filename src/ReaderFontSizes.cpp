@@ -2,6 +2,8 @@
 
 #include <iterator>
 
+#include "CrossPointSettings.h"
+
 std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, const char* sdFamilyName) {
   if (registry && sdFamilyName && sdFamilyName[0] != '\0') {
     if (const auto* family = registry->findFamily(sdFamilyName)) {
@@ -12,7 +14,8 @@ std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, co
       if (!sizes.empty()) return sizes;
     }
   }
-  return {std::begin(BUILTIN_READER_POINT_SIZES), std::end(BUILTIN_READER_POINT_SIZES)};
+  const PointSizeSet builtin = builtinReaderPointSizes(SETTINGS.fontFamily == CrossPointSettings::NOTOSANS);
+  return {builtin.sizes, builtin.sizes + builtin.count};
 }
 
 uint8_t snapToNearestPointSize(const uint8_t* sizes, const size_t count, const uint8_t pt) {

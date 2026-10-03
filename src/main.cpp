@@ -82,6 +82,12 @@ EpdFont notoserif14BoldItalicFont(&notoserif_14_bolditalic);
 EpdFontFamily notoserif14FontFamily(&notoserif14RegularFont, &notoserif14BoldFont, &notoserif14ItalicFont,
                                     &notoserif14BoldItalicFont);
 #ifndef OMIT_FONTS
+EpdFont notoserif10RegularFont(&notoserif_10_regular);
+EpdFont notoserif10BoldFont(&notoserif_10_bold);
+EpdFont notoserif10ItalicFont(&notoserif_10_italic);
+EpdFont notoserif10BoldItalicFont(&notoserif_10_bolditalic);
+EpdFontFamily notoserif10FontFamily(&notoserif10RegularFont, &notoserif10BoldFont, &notoserif10ItalicFont,
+                                    &notoserif10BoldItalicFont);
 EpdFont notoserif12RegularFont(&notoserif_12_regular);
 EpdFont notoserif12BoldFont(&notoserif_12_bold);
 EpdFont notoserif12ItalicFont(&notoserif_12_italic);
@@ -412,6 +418,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(NOTOSERIF_14_FONT_ID, notoserif14FontFamily);
 #ifndef OMIT_FONTS
+  renderer.insertFont(NOTOSERIF_10_FONT_ID, notoserif10FontFamily);
   renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
   renderer.insertFont(NOTOSERIF_16_FONT_ID, notoserif16FontFamily);
   renderer.insertFont(NOTOSERIF_18_FONT_ID, notoserif18FontFamily);

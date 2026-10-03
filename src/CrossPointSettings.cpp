@@ -389,8 +389,8 @@ int CrossPointSettings::getRefreshFrequency() const {
 
 void CrossPointSettings::clearSdFontFamily() {
   sdFontFamilyName[0] = '\0';
-  fontPointSize =
-      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  const PointSizeSet builtin = builtinReaderPointSizes(fontFamily == NOTOSANS);
+  fontPointSize = snapToNearestPointSize(builtin.sizes, builtin.count, fontPointSize);
   saveToFile();
 }
 
@@ -406,10 +406,12 @@ int CrossPointSettings::getReaderFontId() const {
   // carried over from an SD family may not be one of them. ensureLoaded()
   // normally persists the snap; snap again here (without allocating — this runs
   // in the page render loop) so rendering is correct even before it has run.
-  const uint8_t pt =
-      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
   const bool sans = (fontFamily == NOTOSANS);
+  const PointSizeSet builtin = builtinReaderPointSizes(sans);
+  const uint8_t pt = snapToNearestPointSize(builtin.sizes, builtin.count, fontPointSize);
   switch (pt) {
+    case 10:
+      return NOTOSERIF_10_FONT_ID;  // Noto Sans has no 10 pt; its size list never offers it
     case 12:
       return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
     case 16:

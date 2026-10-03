@@ -1,5 +1,9 @@
 #pragma once
 
+#include <builtinFonts/notoserif_10_bold.h>
+#include <builtinFonts/notoserif_10_bolditalic.h>
+#include <builtinFonts/notoserif_10_italic.h>
+#include <builtinFonts/notoserif_10_regular.h>
 #include <builtinFonts/notoserif_12_bold.h>
 #include <builtinFonts/notoserif_12_bolditalic.h>
 #include <builtinFonts/notoserif_12_italic.h>
