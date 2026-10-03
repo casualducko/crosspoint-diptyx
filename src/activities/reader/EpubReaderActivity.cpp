@@ -1973,7 +1973,8 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
 
   if (RightPanel::present(renderer, display, draw, leftWasFull ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH,
                           /*keepInversion=*/true)) {
-    rightPageKey = key;
+    // A page that exists but failed to load was shown blank; leave the key unset so the next render retries it.
+    if (!pageExists || rightPage) rightPageKey = key;
     RightPanel::markDirty();  // the home screen must redraw its card after reading
   }
 }

@@ -79,8 +79,8 @@ void ActivityManager::renderTaskLoop() {
       if (BoardConfig::isDiptyx() && (SETTINGS.screenInverted != 0) != rightPanelInverted) {
         // Night mode was toggled (from Settings or any reader menu): the Diptyx's right panel shows its last frame
         // again in the new polarity at once, whatever activity is on top.
-        rightPanelInverted = SETTINGS.screenInverted != 0;
-        RightPanel::refreshPolarity(renderer, display);
+        // Only remembered once the redraw worked, so an out-of-memory failure is retried on the next render.
+        if (RightPanel::refreshPolarity(renderer, display)) rightPanelInverted = SETTINGS.screenInverted != 0;
       }
       currentActivity->render(std::move(lock));
     }
@@ -355,9 +355,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
     }
   }
   // Diptyx: the grey cover tile shows page ghosting after a book, so leaving a reader repaints home with a full refresh.
-  if (BoardConfig::isDiptyx() && currentActivity && (currentActivity->name == "EpubReader" || currentActivity->name == "XtcReader")) {
-    cleanInitialRefresh = true;
-  }
+  if (BoardConfig::isDiptyx() && isReaderActivity()) cleanInitialRefresh = true;
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }

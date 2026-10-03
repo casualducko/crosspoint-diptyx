@@ -20,7 +20,8 @@ void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display);
 // The left panel's night-mode setting changed: show the right panel's last frame again in the new polarity. No
 // re-render is needed (the display inverts at output), so this works whatever activity or menu is on top, for the home
 // card and for a reader page alike. No-op when the right panel shows the idle image or nothing known.
-void refreshPolarity(GfxRenderer& renderer, HalDisplay& display);
+// Returns false only when the redraw failed (e.g. out of memory), so the caller tries again on the next render.
+bool refreshPolarity(GfxRenderer& renderer, HalDisplay& display);
 
 namespace detail {
 // Keep a copy of the frame just drawn for the right panel (polarity-following content), or forget it.

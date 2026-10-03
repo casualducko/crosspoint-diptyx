@@ -9,6 +9,7 @@
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Xtc.h>
 #include <esp_attr.h>
 #include <esp_heap_caps.h>
@@ -58,6 +59,8 @@ bool shownCardValid = false;
 bool currentBook(BookCard& card) {
   const auto& books = RECENT_BOOKS.getBooks();
   card.path = APP_STATE.openEpubPath;
+  // A deleted open book must not leave a text-only card while Home shows another book.
+  if (!card.path.empty() && !Storage.exists(card.path.c_str())) card.path.clear();
   if (card.path.empty() && !books.empty()) card.path = books.front().path;
   if (card.path.empty()) return false;
   for (const auto& b : books) {
@@ -74,18 +77,27 @@ bool currentBook(BookCard& card) {
 // runs when the card is actually redrawn. Failures (e.g. a progressive JPEG) just mean a text-only card.
 void resolveCover(BookCard& card) {
   if (FsHelpers::hasXtcExtension(card.path)) {
-    Xtc xtc(card.path, "/.crosspoint");
-    if (xtc.load() && xtc.generateCoverBmp()) card.coverBmpPath = xtc.getCoverBmpPath();
+    // The book objects are large; keep them off the task stack.
+    auto xtc = makeUniqueNoThrow<Xtc>(card.path, "/.crosspoint");
+    if (!xtc) {
+      LOG_ERR("RP", "OOM: XTC cover");
+      return;
+    }
+    if (xtc->load() && xtc->generateCoverBmp()) card.coverBmpPath = xtc->getCoverBmpPath();
   } else if (FsHelpers::hasReflowableBookExtension(card.path)) {
-    Epub epub(card.path, "/.crosspoint");
-    if (epub.load(true, true)) {
-      if (card.title.empty()) card.title = epub.getTitle();
-      if (card.author.empty()) card.author = epub.getAuthor();
+    auto epub = makeUniqueNoThrow<Epub>(card.path, "/.crosspoint");
+    if (!epub) {
+      LOG_ERR("RP", "OOM: EPUB cover");
+      return;
+    }
+    if (epub->load(true, true)) {
+      if (card.title.empty()) card.title = epub->getTitle();
+      if (card.author.empty()) card.author = epub->getAuthor();
       // The panel has no grayscale, so a 1-bit dithered cover sized to the card beats thresholding the 2-bit one.
-      if (epub.generateThumbBmp(kCoverBoxHeight)) {
-        card.coverBmpPath = epub.getThumbBmpPath(kCoverBoxHeight);
-      } else if (epub.generateCoverBmp(false, false)) {
-        card.coverBmpPath = epub.getCoverBmpPath(false, false);
+      if (epub->generateThumbBmp(kCoverBoxHeight)) {
+        card.coverBmpPath = epub->getThumbBmpPath(kCoverBoxHeight);
+      } else if (epub->generateCoverBmp(false, false)) {
+        card.coverBmpPath = epub->getCoverBmpPath(false, false);
       }
     }
   }
@@ -152,8 +164,9 @@ void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
   }
 }
 
-// Draws the stock idle image into the framebuffer. False if there is no usable image.
-bool drawIdleImage(GfxRenderer& r) {
+// Makes sure the 1-bit conversion of the stock idle image is cached. False if there is no usable image. This decodes a
+// JPEG, so it runs before present() parks a copy of the left frame (which would take heap away from the decoder).
+bool ensureIdleCache(const GfxRenderer& r) {
   if (!Storage.exists(IDLE_JPG)) return false;
   // The conversion is cached, but must follow the JPEG: replacing idle_screen_right.jpg (a different size) has to
   // regenerate it. The size of the source file is the cache key.
@@ -185,6 +198,11 @@ bool drawIdleImage(GfxRenderer& r) {
     }
     Storage.writeFile(IDLE_KEY, String(jpgKey.c_str()));  // written last: a half-written cache is never trusted
   }
+  return true;
+}
+
+// Draws the cached idle image into the framebuffer. False if it cannot be read.
+bool drawIdleImage(GfxRenderer& r) {
   HalFile file;
   if (!Storage.openFileForRead("RP", IDLE_BMP, file)) return false;
   Bitmap bitmap(file);
@@ -237,17 +255,20 @@ void showCoverCardIfChanged(GfxRenderer& renderer, HalDisplay& display) {
   }
 }
 
-void refreshPolarity(GfxRenderer& renderer, HalDisplay& display) {
-  if (!BoardConfig::isDiptyx() || !storedValid) return;
+bool refreshPolarity(GfxRenderer& renderer, HalDisplay& display) {
+  if (!BoardConfig::isDiptyx() || !storedValid) return true;
   const bool inverted = display.isInverted();
-  if (inverted == storedInverted) return;
+  if (inverted == storedInverted) return true;
   const size_t bytes = storedBytes;
   // present() re-remembers the same frame, now in the new polarity.
-  if (presentOnRight(
-          renderer, display, [&] { memcpy(display.getFrameBuffer(), storedFrame, bytes); }, /*followNightMode=*/true) &&
-      shownKey != 0 && shownCardValid) {
+  if (!presentOnRight(
+          renderer, display, [&] { memcpy(display.getFrameBuffer(), storedFrame, bytes); }, /*followNightMode=*/true)) {
+    return false;
+  }
+  if (shownKey != 0 && shownCardValid) {
     shownKey = cardKey(!shownCard.path.empty(), shownCard.path, inverted);  // the card is on the panel in this polarity
   }
+  return true;
 }
 
 namespace detail {
@@ -281,22 +302,20 @@ void markDirty() { shownKey = 0; }
 
 void showSleepScreen(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;
-  bool idleDrawn = false;
   BookCard card;
   // Title & Author follows the left screen's cover rule: only a book that is open right now (sleeping from the home
   // screen has none); otherwise this falls back to the idle image or the card.
   const bool quiet = SETTINGS.rightSleepScreen == CrossPointSettings::RIGHT_SLEEP_TITLE_AUTHOR &&
                      !APP_STATE.openEpubPath.empty() && currentBook(card) && !card.title.empty();
+  // Everything that decodes or opens a book happens before present(), while the heap is not yet short by the parked
+  // left frame; the draw callback only paints.
+  const bool idleReady = !quiet && ensureIdleCache(renderer);
+  const bool cardFromBook = !quiet && !idleReady && currentBook(card);
+  if (cardFromBook) resolveCover(card);
   presentOnRight(renderer, display, [&] {
     if (quiet) {
       drawQuietTitle(renderer, card);
-      return;
-    }
-    idleDrawn = drawIdleImage(renderer);
-    if (!idleDrawn && currentBook(card)) {
-      resolveCover(card);
-      drawBookCard(renderer, card);
-    } else if (!idleDrawn) {
+    } else if (!(idleReady && drawIdleImage(renderer))) {
       drawBookCard(renderer, card);
     }
   });

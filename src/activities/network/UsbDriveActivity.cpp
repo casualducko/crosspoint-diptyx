@@ -39,7 +39,7 @@ void UsbDriveActivity::onExit() {
     Storage.endUsbDrive();
     // The host may have added, removed or renamed books while it owned the card: rebuild the Library index on the next
     // visit (a Wi-Fi upload or OPDS download does the same).
-    library::markLibraryIndexDirty();
+    if (hostMayHaveWrittenBooks()) library::markLibraryIndexDirty();
   }
   Activity::onExit();
 }
@@ -193,7 +193,7 @@ void UsbDriveActivity::restartToHome() {
   if (restartRequested) return;
   restartRequested = true;
   Storage.endUsbDrive();
-  library::markLibraryIndexDirty();  // the host may have changed the books; see onExit()
+  if (hostMayHaveWrittenBooks()) library::markLibraryIndexDirty();  // the host may have changed the books; see onExit()
   delay(20);
   restartToHomeAfterStorageHandoff();
 }

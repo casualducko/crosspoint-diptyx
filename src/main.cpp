@@ -172,7 +172,7 @@ enum class BootResume : uint8_t {
 // on wake and already clears the heap, so rebooting here would just power the
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
-static bool deepSleepInProgress = false;
+static volatile bool deepSleepInProgress = false;  // also read by the Diptyx power failsafe task
 
 // A silent restart is internal maintenance, so the light must come back exactly
 // as the user left it. SETTINGS.frontlightOn is the saved preference and
@@ -455,6 +455,9 @@ static void holdPowerLatchThroughRestart() {
 // button for the ~3 s it takes to switch the device on could trigger it), and the normal power-button hold (shorter)
 // is untouched. If the whole chip is dead nothing in software can help.
 static constexpr uint32_t POWER_FAILSAFE_MS = 10000;
+// While the main task is still preparing to sleep (saving state, drawing the sleep screens), cutting power could corrupt
+// the SD card, so the failsafe waits longer; a main task that really is frozen there still gets cut off.
+static constexpr uint32_t POWER_FAILSAFE_SLEEPING_MS = 25000;
 static constexpr uint32_t POWER_FAILSAFE_POLL_MS = 100;
 
 static void powerFailsafeTask(void*) {
@@ -477,7 +480,7 @@ static void powerFailsafeTask(void*) {
     }
     if (!armed) continue;
     heldMs += POWER_FAILSAFE_POLL_MS;
-    if (heldMs < POWER_FAILSAFE_MS) continue;
+    if (heldMs < (deepSleepInProgress ? POWER_FAILSAFE_SLEEPING_MS : POWER_FAILSAFE_MS)) continue;
 
     esp_rom_printf("[PWR] failsafe: power button held %u ms, powering off\n", static_cast<unsigned>(heldMs));
     // Acknowledge: blink the status LED so you know it is time to let go.
@@ -508,7 +511,7 @@ void setup() {
   BoardConfig::holdPowerRails();
   if (BoardConfig::isDiptyx()) {
     esp_register_shutdown_handler(holdPowerLatchThroughRestart);
-    xTaskCreate(powerFailsafeTask, "pwrfailsafe", 3072, nullptr, 20, nullptr);
+    xTaskCreate(powerFailsafeTask, "pwrfailsafe", 4096, nullptr, 20, nullptr);
   }
 
 #ifdef ENABLE_SERIAL_LOG

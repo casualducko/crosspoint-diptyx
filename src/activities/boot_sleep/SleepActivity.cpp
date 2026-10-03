@@ -508,6 +508,7 @@ void SleepActivity::onEnter() {
   if (BoardConfig::isDiptyx()) {
     releaseSdFontCachesForDecode(
         renderer);  // the idle image / cover decode needs the heap, like the left sleep screens
+    RenderLock lock(*this);  // the render task may still be finishing the previous activity's frame
     RightPanel::showSleepScreen(renderer, display);
   }
 

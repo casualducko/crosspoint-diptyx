@@ -14,6 +14,8 @@ class UsbDriveActivity final : public Activity, private UiAppHost {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  // The host can only have changed the card if a session actually started.
+  bool hostMayHaveWrittenBooks() const { return !startFailed && state != State::Unsupported; }
   bool preventAutoSleep() override { return state == State::Connected || (!startFailed && state == State::IoError); }
   bool requiresExclusiveStorageLoop() const override { return true; }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BoardConfig.h>
 #include <SdCardFontRegistry.h>
 
 #include <cstddef>
@@ -26,7 +27,7 @@ struct PointSizeSet {
 
 // The sizes the active built-in family ships: Noto Serif or (sans == true) Noto Sans.
 inline PointSizeSet builtinReaderPointSizes(const bool sans) {
-  return sans ? PointSizeSet{BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES)}
+  return (sans || !BoardConfig::isDiptyx()) ? PointSizeSet{BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES)}
               : PointSizeSet{BUILTIN_SERIF_READER_POINT_SIZES, std::size(BUILTIN_SERIF_READER_POINT_SIZES)};
 }
 
