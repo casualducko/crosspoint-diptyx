@@ -104,6 +104,11 @@ void HalGPIO::begin() {
 #else
   _deviceType = DeviceType::X4;
 #endif
+  // Diptyx: the VBUS-detect pin has no external pull-down. Left floating it can read "USB connected" on battery (the
+  // stock firmware enables the internal pull-down for the same reason), which made isUsbConnected() unreliable.
+  if (BoardConfig::isDiptyx() && BoardConfig::ACTIVE.usbDetect >= 0) {
+    pinMode(BoardConfig::ACTIVE.usbDetect, INPUT_PULLDOWN);
+  }
   inputMgr.begin();
 }
 

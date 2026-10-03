@@ -473,6 +473,14 @@ static void powerFailsafeTask(void*) {
     if (heldMs < POWER_FAILSAFE_MS) continue;
 
     esp_rom_printf("[PWR] failsafe: power button held %u ms, powering off\n", static_cast<unsigned>(heldMs));
+    // Acknowledge: blink the status LED so you know it is time to let go.
+    gpio_set_direction(GPIO_NUM_48, GPIO_MODE_OUTPUT);
+    for (int i = 0; i < 3; i++) {
+      gpio_set_level(GPIO_NUM_48, 0);
+      vTaskDelay(pdMS_TO_TICKS(120));
+      gpio_set_level(GPIO_NUM_48, 1);
+      vTaskDelay(pdMS_TO_TICKS(120));
+    }
     if (latch >= 0) {  // let go of the battery latch; the board powers off once the button is released
       const auto latchPin = static_cast<gpio_num_t>(latch);
       gpio_hold_dis(latchPin);
@@ -480,21 +488,11 @@ static void powerFailsafeTask(void*) {
       gpio_set_level(latchPin, 0);
       gpio_hold_en(latchPin);
     }
-    // The power button itself keeps the rail up until it is released.
+    // The power button itself keeps the rail up until it is released. Then go to standby, like the normal power-off:
+    // on battery the rail collapses by itself within a moment; on USB the board stays powered, and any of the seven
+    // buttons wakes it (a restart). Never esp_restart() here: the restart handler would take the latch back before the
+    // rail collapses (this happened), and the USB-detect pin is not needed to decide anything.
     while (gpio_get_level(buttonPin) == pressedLevel) vTaskDelay(pdMS_TO_TICKS(POWER_FAILSAFE_POLL_MS));
-    // On USB the board stays powered, so restart (setup() takes the latch again). On battery the rail collapses by
-    // itself within a moment of the release: do NOT restart, the shutdown handler would take the latch back before
-    // it does. Go to standby instead and wait for the power to die; any of the seven buttons wakes it if it does not.
-    const int8_t vbus = BoardConfig::ACTIVE.usbDetect;
-    bool usbPresent = false;
-    if (vbus >= 0) {
-      gpio_set_direction(static_cast<gpio_num_t>(vbus), GPIO_MODE_INPUT);
-      usbPresent = gpio_get_level(static_cast<gpio_num_t>(vbus)) == 1;
-    }
-    if (usbPresent) {
-      vTaskDelay(pdMS_TO_TICKS(300));
-      esp_restart();
-    }
     freeink::PowerManager::deepSleepUntilPowerButton();
   }
 }
