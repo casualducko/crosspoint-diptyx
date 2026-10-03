@@ -15,6 +15,7 @@
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <PowerManager.h>
 #include <SPI.h>
 #include <TrustedTime.h>
 #include <VectorFontSupport.h>
@@ -479,11 +480,22 @@ static void powerFailsafeTask(void*) {
       gpio_set_level(latchPin, 0);
       gpio_hold_en(latchPin);
     }
-    // On battery the power button itself keeps the rail up until it is released, then the board is off. On USB the
-    // board stays powered, so restart once the button is released (setup() takes the latch again).
+    // The power button itself keeps the rail up until it is released.
     while (gpio_get_level(buttonPin) == pressedLevel) vTaskDelay(pdMS_TO_TICKS(POWER_FAILSAFE_POLL_MS));
-    vTaskDelay(pdMS_TO_TICKS(300));
-    esp_restart();
+    // On USB the board stays powered, so restart (setup() takes the latch again). On battery the rail collapses by
+    // itself within a moment of the release: do NOT restart, the shutdown handler would take the latch back before
+    // it does. Go to standby instead and wait for the power to die; any of the seven buttons wakes it if it does not.
+    const int8_t vbus = BoardConfig::ACTIVE.usbDetect;
+    bool usbPresent = false;
+    if (vbus >= 0) {
+      gpio_set_direction(static_cast<gpio_num_t>(vbus), GPIO_MODE_INPUT);
+      usbPresent = gpio_get_level(static_cast<gpio_num_t>(vbus)) == 1;
+    }
+    if (usbPresent) {
+      vTaskDelay(pdMS_TO_TICKS(300));
+      esp_restart();
+    }
+    freeink::PowerManager::deepSleepUntilPowerButton();
   }
 }
 
@@ -738,6 +750,12 @@ void loop() {
 #ifdef DIPTYX_FAILSAFE_TEST
   // Test builds only (env diptyx-failsafe-test, never shipped): joystick-right (GPIO4, unmapped) deadlocks the main
   // task, so the power failsafe can be exercised.
+  static bool testPinReady = false;
+  if (!testPinReady) {
+    pinMode(4, INPUT_PULLUP);  // unmapped pin: without a pull-up it floats and can read low by itself
+    testPinReady = true;
+    delay(5);
+  }
   if (digitalRead(4) == LOW) {
     esp_rom_printf("[TEST] deliberate hang: main task blocked forever\n");
     vTaskDelay(portMAX_DELAY);
