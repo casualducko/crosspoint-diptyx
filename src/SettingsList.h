@@ -190,8 +190,11 @@ inline std::vector<StrId> buildLongPressMenuValues() {
 
 inline std::vector<StrId> homeThemeValues() {
   static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
-  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
+                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID,
+                                     StrId::STR_THEME_LYRA_COMPACT};
+  // Cover Grid needs PSRAM; Lyra Compact is Diptyx-only (the Diptyx has PSRAM, so both show there).
+  size_t count = std::size(VALUES) - 2;
+  if (UITheme::supportsCoverGrid()) count = BoardConfig::isDiptyx() ? std::size(VALUES) : std::size(VALUES) - 1;
   return {VALUES, VALUES + count};
 }
 
