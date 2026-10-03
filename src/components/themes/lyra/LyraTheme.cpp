@@ -118,7 +118,7 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   const int pageHeight = renderer.getScreenHeight();
-  constexpr int buttonWidth = 80;
+  constexpr int kButtonWidth = 80;
   constexpr int smallButtonHeight = 15;
   constexpr int buttonHeight = LyraMetrics::values.buttonHintsHeight;
   constexpr int buttonY = LyraMetrics::values.buttonHintsHeight;  // Distance from bottom
@@ -134,10 +134,13 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   // Diptyx has three bottom buttons (page-left, center button, page-right): draw Back / Select / Next centered over them
   // (box centers at x = 66 / 240 / 414 of the 480-wide portrait panel) and drop the Prev slot. Center button up does the
   // same, it just has no hint.
-  constexpr int diptyxButtonPositions[] = {26, 200, 374};
+  // Wider than the X4's 80 px boxes: the Diptyx buttons are 174 px apart, and "Download" does not fit in 72 px.
+  constexpr int kDiptyxButtonWidth = 112;
+  constexpr int diptyxButtonPositions[] = {10, 184, 358};
   const char* diptyxLabels[] = {btn1, btn2, btn4};
   const bool threeButtons = BoardConfig::isDiptyx();
   const int hintCount = threeButtons ? 3 : 4;
+  const int buttonWidth = threeButtons ? kDiptyxButtonWidth : kButtonWidth;
   if (threeButtons) {
     buttonPositions = diptyxButtonPositions;
     for (int i = 0; i < 3; i++) labels[i] = diptyxLabels[i];
