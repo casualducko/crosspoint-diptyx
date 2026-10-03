@@ -132,8 +132,8 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
   // Diptyx has three bottom buttons (page-left, joystick, page-right): draw Back / Select / Next centred over them
-  // (box centres at x = 66 / 240 / 414 of the 480-wide portrait panel) and drop the Prev slot. Joystick-left
-  // still works, it just has no hint.
+  // (box centres at x = 66 / 240 / 414 of the 480-wide portrait panel) and drop the Prev slot. Joystick up does the
+  // same, it just has no hint.
   constexpr int diptyxButtonPositions[] = {26, 200, 374};
   const char* diptyxLabels[] = {btn1, btn2, btn4};
   const bool threeButtons = BoardConfig::isDiptyx();

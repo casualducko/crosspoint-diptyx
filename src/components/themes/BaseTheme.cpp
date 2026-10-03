@@ -232,7 +232,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
   // Diptyx has three bottom buttons (page-left, joystick, page-right): draw Back / Select / Next centred over them
-  // and drop the Prev slot (joystick-left still works, it just has no hint).
+  // and drop the Prev slot (joystick up does the same, it just has no hint).
   constexpr int diptyxButtonPositions[] = {13, 187, 361};
   const char* diptyxLabels[] = {btn1, btn2, btn4};
   const bool threeButtons = BoardConfig::isDiptyx();

@@ -748,17 +748,17 @@ void setup() {
 
 void loop() {
 #ifdef DIPTYX_FAILSAFE_TEST
-  // Test builds only (env diptyx-failsafe-test, never shipped): joystick-right (GPIO4, unmapped) deadlocks the main
-  // task, so the power failsafe can be exercised.
-  static bool testPinReady = false;
-  if (!testPinReady) {
-    pinMode(4, INPUT_PULLUP);  // unmapped pin: without a pull-up it floats and can read low by itself
-    testPinReady = true;
-    delay(5);
-  }
-  if (digitalRead(4) == LOW) {
-    esp_rom_printf("[TEST] deliberate hang: main task blocked forever\n");
-    vTaskDelay(portMAX_DELAY);
+  // Test builds only (env diptyx-failsafe-test, never shipped): holding the left (page-left, GPIO5) button for 3 s
+  // deadlocks the main task, so the power failsafe can be exercised.
+  static unsigned long testHoldStart = 0;
+  if (digitalRead(5) == LOW) {
+    if (testHoldStart == 0) testHoldStart = millis();
+    if (millis() - testHoldStart > 3000) {
+      esp_rom_printf("[TEST] deliberate hang: main task blocked forever\n");
+      vTaskDelay(portMAX_DELAY);
+    }
+  } else {
+    testHoldStart = 0;
   }
 #endif
   static unsigned long maxLoopDuration = 0;

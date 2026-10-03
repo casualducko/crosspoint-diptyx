@@ -69,13 +69,15 @@ Other commands: `./flash.sh check` (inspect only, writes nothing), `./flash.sh b
 Unplug the cable and plug it in again without touching the joystick. The left screen shows the CrossPoint home screen; the right screen
 fills in with the card for your current book after a few seconds.
 
+The Diptyx has five controls: a left button, a centre rocker that presses and moves up and down, and a right button (plus the
+power button).
+
 | Control | What it does |
 |---|---|
 | Left button (page-left) | Back |
 | Joystick press | Select / open the reader menu |
 | Right button (page-right) | Next / down (next page in a book) |
 | Joystick up / down | Move up / down; in a book, previous / next page |
-| Joystick left | Previous / up (previous page in a book) |
 | Power button | Hold: power off. Hold ~3 s when off: power on. |
 
 - **Sleep:** it sleeps after the idle timeout (or from the menu) and any of the seven buttons wakes it. Holding the power button powers it off
