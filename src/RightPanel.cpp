@@ -283,9 +283,10 @@ void showSleepScreen(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;
   bool idleDrawn = false;
   BookCard card;
-  // Title & Author needs a current book with a title; otherwise this falls back to the idle image or the card.
-  const bool quiet = SETTINGS.rightSleepScreen == CrossPointSettings::RIGHT_SLEEP_TITLE_AUTHOR && currentBook(card) &&
-                     !card.title.empty();
+  // Title & Author follows the left screen's cover rule: only a book that is open right now (sleeping from the home
+  // screen has none); otherwise this falls back to the idle image or the card.
+  const bool quiet = SETTINGS.rightSleepScreen == CrossPointSettings::RIGHT_SLEEP_TITLE_AUTHOR &&
+                     !APP_STATE.openEpubPath.empty() && currentBook(card) && !card.title.empty();
   presentOnRight(renderer, display, [&] {
     if (quiet) {
       drawQuietTitle(renderer, card);
