@@ -26,8 +26,9 @@
 namespace {
 
 constexpr char IDLE_JPG[] = "/idle_screen_right.jpg";       // stock Diptyx idle image convention
-// Cover box height on the 480x648 card (screen height minus the title area).
-constexpr int kCoverBoxHeight = 458;
+// Cover box height on the 480x648 card: the cover fills the panel inside a margin, with no text.
+constexpr int kCoverMargin = 28;
+constexpr int kCoverBoxHeight = 648 - 2 * kCoverMargin;
 constexpr char IDLE_BMP[] = "/.crosspoint/idle_right.bmp";  // 1-bit conversion cache
 constexpr char IDLE_KEY[] = "/.crosspoint/idle_right.key";  // size of the JPEG the cache was made from
 
@@ -110,9 +111,9 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
     if (Storage.openFileForRead("RP", card.coverBmpPath, file)) {
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        constexpr int margin = 28;
+        constexpr int margin = kCoverMargin;
         const int boxW = w - 2 * margin;
-        const int boxH = h - 190;
+        const int boxH = h - 2 * margin;
         // drawBitmap only scales down, so centre using the scaled size.
         float scale =
             std::min(static_cast<float>(boxW) / bitmap.getWidth(), static_cast<float>(boxH) / bitmap.getHeight());
@@ -125,11 +126,7 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
   }
 
   const int textWidth = w - 56;
-  if (drewCover) {
-    int y = h - 150;
-    drawCentered(r, UI_12_FONT_ID, card.title, y, 2, textWidth);
-    drawCentered(r, UI_10_FONT_ID, card.author, y, 1, textWidth);
-  } else {
+  if (!drewCover) {
     int y = h / 2 - 90;
     drawCentered(r, UI_12_FONT_ID, card.title.empty() ? "CrossPoint" : card.title, y, 4, textWidth);
     y += 16;
