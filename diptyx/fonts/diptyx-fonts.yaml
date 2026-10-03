@@ -1,5 +1,8 @@
-# Diptyx font pack: SD-card reader fonts curated for the Diptyx panels (~138 ppi), built with
-# lib/EpdFont/scripts/build-sd-fonts.py (see diptyx/fonts/README.md). All four families (and their Mono builds) are SIL OFL 1.1. A family with `mono: true` is built with --mono (monochrome-hinted glyphs, whole-pixel advances).
+# Diptyx font pack: mono-hinted SD-card reader fonts curated for the Diptyx panels (~138 ppi), built with
+# lib/EpdFont/scripts/build-sd-fonts.py (see diptyx/fonts/README.md). All families are under the SIL Open Font License 1.1
+# (licenses/). `mono: true` builds with --mono: monochrome-hinted glyphs at a whole-pixel size with whole-pixel advances.
+# Families whose licence reserves their name (Merriweather, Gentium, IBM Plex, OpenDyslexic) are not shipped under that name:
+# the OFL counts a format conversion as a Modified Version, which may not use a Reserved Font Name.
 scriptGroups:
 - tag: latin
   label: Latin
@@ -7,59 +10,27 @@ scriptGroups:
   label: Cyrillic
 - tag: greek
   label: Greek
+- tag: hebrew
+  label: Hebrew
+- tag: arabic
+  label: Arabic
+- tag: georgian
+  label: Georgian
+- tag: armenian
+  label: Armenian
+- tag: ethiopic
+  label: Ethiopic
+- tag: cjk
+  label: CJK
+- tag: hangul
+  label: Korean
+- tag: cherokee
+  label: Cherokee
+- tag: tifinagh
+  label: Tifinagh
 families:
-- name: Bitter
-  description: Slab serif designed for e-ink (Latin, Cyrillic)
-  scripts:
-  - latin
-  - cyrillic
-  intervals: latin-ext,cyrillic,ipa-chars
-  sizes:
-  - 10
-  - 12
-  - 14
-  - 16
-  - 18
-  styles:
-    regular:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf
-      variable:
-        wght: 500
-    bold:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf
-      variable:
-        wght: 700
-    italic:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf
-      variable:
-        wght: 500
-    bolditalic:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf
-      variable:
-        wght: 700
-- name: ChareInk
-  description: E-ink optimized serif based on Charis SIL (Latin, Cyrillic), from CrossInk
-  scripts:
-  - latin
-  - cyrillic
-  intervals: latin-ext,cyrillic
-  sizes:
-  - 10
-  - 12
-  - 14
-  - 16
-  - 18
-  styles:
-    regular:
-      url: https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Regular.ttf
-    bold:
-      url: https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Bold.ttf
-    italic:
-      url: https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Italic.ttf
-    bolditalic:
-      url: https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-BoldItalic.ttf
-- name: Literata
-  description: Screen-optimized serif (Latin, Greek, Cyrillic)
+- name: LiterataMono
+  description: Screen-optimized serif (Latin, Greek, Cyrillic) - mono-hinted
   scripts:
   - latin
   - cyrillic
@@ -80,11 +51,14 @@ families:
       url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Italic.ttf
     bolditalic:
       url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-BoldItalic.ttf
-- name: CrimsonPro
-  description: Elegant old-style serif (Latin)
+  mono: true
+- name: VollkornMono
+  description: A serif for bread and butter use by Friedrich Althausen (Latin, Greek, Cyrillic) - mono-hinted
   scripts:
   - latin
-  intervals: latin-ext
+  - cyrillic
+  - greek
+  intervals: latin-ext,greek,cyrillic,ipa-chars
   sizes:
   - 10
   - 12
@@ -93,23 +67,24 @@ families:
   - 18
   styles:
     regular:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro%5Bwght%5D.ttf
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf
       variable:
-        wght: 500
+        wght: 400
     bold:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro%5Bwght%5D.ttf
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf
       variable:
         wght: 700
     italic:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro-Italic%5Bwght%5D.ttf
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn-Italic%5Bwght%5D.ttf
       variable:
-        wght: 500
+        wght: 400
     bolditalic:
-      url: https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro-Italic%5Bwght%5D.ttf
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn-Italic%5Bwght%5D.ttf
       variable:
         wght: 700
+  mono: true
 - name: BitterMono
-  description: Slab serif designed for e-ink (Latin, Cyrillic) - mono-hinted for black-and-white panels
+  description: Slab serif designed for e-ink (Latin, Cyrillic) - mono-hinted
   scripts:
   - latin
   - cyrillic
@@ -139,7 +114,7 @@ families:
         wght: 700
   mono: true
 - name: ChareInkMono
-  description: E-ink optimized serif based on Charis SIL (Latin, Cyrillic), from CrossInk - mono-hinted for black-and-white panels
+  description: E-ink optimized serif based on Charis SIL (Latin, Cyrillic), from CrossInk - mono-hinted
   scripts:
   - latin
   - cyrillic
@@ -160,31 +135,8 @@ families:
     bolditalic:
       url: https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-BoldItalic.ttf
   mono: true
-- name: LiterataMono
-  description: Screen-optimized serif (Latin, Greek, Cyrillic) - mono-hinted for black-and-white panels
-  scripts:
-  - latin
-  - cyrillic
-  - greek
-  intervals: latin-ext,greek,cyrillic,ipa-chars
-  sizes:
-  - 10
-  - 12
-  - 14
-  - 16
-  - 18
-  styles:
-    regular:
-      url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Regular.ttf
-    bold:
-      url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Bold.ttf
-    italic:
-      url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Italic.ttf
-    bolditalic:
-      url: https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-BoldItalic.ttf
-  mono: true
 - name: CrimsonProMono
-  description: Elegant old-style serif (Latin) - mono-hinted for black-and-white panels
+  description: Elegant old-style serif (Latin) - mono-hinted
   scripts:
   - latin
   intervals: latin-ext
@@ -211,4 +163,107 @@ families:
       url: https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro-Italic%5Bwght%5D.ttf
       variable:
         wght: 700
+  mono: true
+- name: AtkinsonHyperlegibleNextMono
+  description: Accessibility font for low vision (Latin) - mono-hinted
+  scripts:
+  - latin
+  intervals: latin-ext,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Regular.ttf
+    bold:
+      url: https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Bold.ttf
+    italic:
+      url: https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Italic.ttf
+    bolditalic:
+      url: https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-BoldItalic.ttf
+  mono: true
+- name: InterMono
+  description: Modern sans-serif (Latin, Greek, Cyrillic) - mono-hinted
+  scripts:
+  - latin
+  - cyrillic
+  - greek
+  intervals: latin-ext,greek,cyrillic,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 400
+        opsz: 14
+    bold:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 700
+        opsz: 14
+    italic:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 400
+        opsz: 14
+    bolditalic:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf
+      variable:
+        wght: 700
+        opsz: 14
+  mono: true
+- name: NotoSansMonochrome
+  description: Sans-serif (Latin, Greek, Cyrillic, Georgian, Armenian, Ethiopic) - mono-hinted
+  scripts:
+  - latin
+  - cyrillic
+  - greek
+  - georgian
+  - armenian
+  - ethiopic
+  intervals: latin-ext,greek,cyrillic,georgian,armenian,ethiopic,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      path: builtinFonts/source/NotoSans/NotoSans-Regular.ttf
+    bold:
+      path: builtinFonts/source/NotoSans/NotoSans-Bold.ttf
+    italic:
+      path: builtinFonts/source/NotoSans/NotoSans-Italic.ttf
+    bolditalic:
+      path: builtinFonts/source/NotoSans/NotoSans-BoldItalic.ttf
+  mono: true
+- name: DyslexicMono
+  description: Dyslexia-friendly font (Latin) - mono-hinted
+  scripts:
+  - latin
+  intervals: latin-ext,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      path: builtinFonts/source/OpenDyslexic/OpenDyslexic-Regular.otf
+    bold:
+      path: builtinFonts/source/OpenDyslexic/OpenDyslexic-Bold.otf
+    italic:
+      path: builtinFonts/source/OpenDyslexic/OpenDyslexic-Italic.otf
+    bolditalic:
+      path: builtinFonts/source/OpenDyslexic/OpenDyslexic-BoldItalic.otf
   mono: true
