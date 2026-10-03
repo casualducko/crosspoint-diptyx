@@ -441,9 +441,58 @@ static void holdPowerLatchThroughRestart() {
   gpio_hold_en(static_cast<gpio_num_t>(pin));
 }
 
+// Diptyx failsafe: holding the power button for POWER_FAILSAFE_MS powers the board off (restarts it when USB keeps it
+// powered) even if the app is frozen. A separate high-priority task watches only that button, so a deadlocked main
+// task cannot disable it. It arms only after the button has been seen released since boot (otherwise holding the
+// button for the ~3 s it takes to switch the device on could trigger it), and the normal power-button hold (shorter)
+// is untouched. If the whole chip is dead nothing in software can help.
+static constexpr uint32_t POWER_FAILSAFE_MS = 10000;
+static constexpr uint32_t POWER_FAILSAFE_POLL_MS = 100;
+
+static void powerFailsafeTask(void*) {
+  const int8_t button = BoardConfig::ACTIVE.input.power;
+  const int8_t latch = BoardConfig::ACTIVE.power.latch0;
+  const int pressedLevel = BoardConfig::ACTIVE.input.powerActiveHigh ? 1 : 0;
+  if (button < 0) vTaskDelete(nullptr);
+  const auto buttonPin = static_cast<gpio_num_t>(button);
+  gpio_set_direction(buttonPin, GPIO_MODE_INPUT);
+  gpio_set_pull_mode(buttonPin, pressedLevel ? GPIO_PULLDOWN_ONLY : GPIO_PULLUP_ONLY);
+
+  bool armed = false;  // set once the button has been released since boot
+  uint32_t heldMs = 0;
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(POWER_FAILSAFE_POLL_MS));
+    if (gpio_get_level(buttonPin) != pressedLevel) {
+      armed = true;
+      heldMs = 0;
+      continue;
+    }
+    if (!armed) continue;
+    heldMs += POWER_FAILSAFE_POLL_MS;
+    if (heldMs < POWER_FAILSAFE_MS) continue;
+
+    esp_rom_printf("[PWR] failsafe: power button held %u ms, powering off\n", static_cast<unsigned>(heldMs));
+    if (latch >= 0) {  // let go of the battery latch; the board powers off once the button is released
+      const auto latchPin = static_cast<gpio_num_t>(latch);
+      gpio_hold_dis(latchPin);
+      gpio_set_direction(latchPin, GPIO_MODE_OUTPUT);
+      gpio_set_level(latchPin, 0);
+      gpio_hold_en(latchPin);
+    }
+    // On battery the power button itself keeps the rail up until it is released, then the board is off. On USB the
+    // board stays powered, so restart once the button is released (setup() takes the latch again).
+    while (gpio_get_level(buttonPin) == pressedLevel) vTaskDelay(pdMS_TO_TICKS(POWER_FAILSAFE_POLL_MS));
+    vTaskDelay(pdMS_TO_TICKS(300));
+    esp_restart();
+  }
+}
+
 void setup() {
   BoardConfig::holdPowerRails();
-  if (BoardConfig::isDiptyx()) esp_register_shutdown_handler(holdPowerLatchThroughRestart);
+  if (BoardConfig::isDiptyx()) {
+    esp_register_shutdown_handler(holdPowerLatchThroughRestart);
+    xTaskCreate(powerFailsafeTask, "pwrfailsafe", 3072, nullptr, 20, nullptr);
+  }
 
 #ifdef ENABLE_SERIAL_LOG
 #ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
@@ -686,6 +735,14 @@ void setup() {
 }
 
 void loop() {
+#ifdef DIPTYX_FAILSAFE_TEST
+  // Test builds only (env diptyx-failsafe-test, never shipped): joystick-right (GPIO4, unmapped) deadlocks the main
+  // task, so the power failsafe can be exercised.
+  if (digitalRead(4) == LOW) {
+    esp_rom_printf("[TEST] deliberate hang: main task blocked forever\n");
+    vTaskDelay(portMAX_DELAY);
+  }
+#endif
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
