@@ -20,7 +20,7 @@ and the rumble motor are unused; no grayscale (the panels are black and white); 
 
 ## Before you start
 
-- A Diptyx running the **stock firmware layout** (1.0.x). The flash script checks this and refuses to flash anything else (the web flasher does not check).
+- A Diptyx running the **stock firmware layout** (1.0.x). Both the web flasher and the flash script check this and refuse to flash anything else.
 - A USB-C **data** cable (a charge-only cable will not work) and a computer running Windows 10/11, macOS or Linux.
 - Your books on the SD card as usual. CrossPoint keeps its own files in a `.crosspoint` folder there.
 - **A backup.** Flashing only writes the app slot, but keep a copy of what you have. The flash script makes one for you (about 3 minutes).
@@ -38,11 +38,18 @@ in again **without** touching the joystick.
 
 ## Option A: the web flasher (easiest)
 
-Open **https://casualducko.github.io/crosspoint-diptyx/** in **Chrome or Edge** (Windows, macOS, Linux). Click *Install*, choose the
-*USB JTAG/serial* port, and follow the prompts. Safari and Firefox cannot flash devices; use option B.
+Open **https://casualducko.github.io/crosspoint-diptyx/** in **Chrome or Edge** (Windows, macOS, Linux), put the Diptyx in download mode
+as above, click *Connect to my Diptyx*, choose the *USB JTAG/serial* port, and follow the page. Safari, Firefox and phones cannot flash devices;
+use option B.
 
-> The web flasher is new and has had less testing than the script, and unlike the script it does **not** check your device's partition
-> table before writing. If you are unsure your device has the stock layout, run `flash.sh check` (option B) first, or just use option B.
+The page does the same safety checks as the script before it writes anything: it must be an ESP32-S3 with 16 MB of flash and the **stock
+Diptyx partition table**, or it refuses and changes nothing. It then downloads the firmware, checks its checksum and structure, writes
+**only the app slot** (0x10000), verifies the written data, and restarts the device. Under *Other options* you can **go back to the stock
+firmware** (downloaded from the makers' repository and checked against a known checksum) or install a firmware file of your own, and a
+button saves a copy of your current app first (about 3 minutes). Everything runs in your browser; the only download is the firmware.
+
+> The web flasher is newer than the script and has had less testing on real hardware, especially on Windows and Linux. If anything looks wrong,
+> the script (option B) gives more detail.
 
 ## Option B: the flash script
 

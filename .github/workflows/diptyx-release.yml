@@ -64,12 +64,15 @@ jobs:
           cp .pio/build/diptyx/firmware.bin "dist/$app"
           cp NOTICE dist/NOTICE.txt   # licences and the written source offer travel with every release
           (cd dist && sha256sum "$app" > "$app.sha256")
-          cp diptyx/web/index.html site/
+          cp -R diptyx/web/index.html diptyx/web/style.css diptyx/web/js diptyx/web/vendor site/
           cp .pio/build/diptyx/firmware.bin site/firmware/crosspoint-diptyx-app.bin
           python3 - "$ver" <<'PY'
-          import json, sys
+          import datetime, hashlib, json, sys
+          fw = open('site/firmware/crosspoint-diptyx-app.bin', 'rb').read()
           m = json.load(open('diptyx/web/manifest.json'))
           m['version'] = sys.argv[1]
+          m['released'] = datetime.date.today().isoformat()
+          m['firmware'] = {'path': 'firmware/crosspoint-diptyx-app.bin', 'size': len(fw), 'sha256': hashlib.sha256(fw).hexdigest()}
           json.dump(m, open('site/manifest.json', 'w'), indent=2)
           PY
           # Notes are written with printf and explicit arguments so tag-derived text is never re-evaluated by the shell.

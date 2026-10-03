@@ -50,6 +50,10 @@ jobs:
         run: |
           set -euo pipefail
           pio run -e diptyx | tee pio.log
+      - name: Web flasher tests
+        run: node --test diptyx/web/test/*.test.mjs
+        env:
+          FIRMWARE_BIN: .pio/build/diptyx/firmware.bin
       - name: Size gate
         run: |
           python3 - <<'PY'

@@ -1,13 +1,6 @@
 {
   "name": "CrossPoint for Diptyx",
   "version": "dev",
-  "new_install_prompt_erase": false,
-  "builds": [
-    {
-      "chipFamily": "ESP32-S3",
-      "parts": [
-        { "path": "firmware/crosspoint-diptyx-app.bin", "offset": 65536 }
-      ]
-    }
-  ]
+  "released": "",
+  "firmware": null
 }

@@ -53,6 +53,8 @@ Libraries fetched by PlatformIO at build time (versions as built; see platformio
 - WebSockets 2.7.3 - LGPL-2.1. Text: diptyx/licenses/LGPL-2.1.txt.
   The firmware is statically linked; the corresponding source and build instructions below let you relink it.
 - JPEGDEC 1.2.7 and PNGdec 1.1.6 (BitBank Software) - Apache-2.0. Text: diptyx/licenses/Apache-2.0.txt.
+- esptool-js 0.7.0 (Espressif Systems) - Apache-2.0. Not part of the firmware: it is the unmodified library bundled with the
+  web flasher page (diptyx/web/vendor/esptool-js.bundle.js, licence text next to it). https://github.com/espressif/esptool-js
 - ArduinoJson 7.4.2 (Benoit Blanchon), SdFat 2.3.1 (Bill Greiman), QRCode 0.0.1
   (Richard Moore) - MIT. See each library's licence file in its source repository.
 Components shipped inside CrossPoint's own source tree (lib/):
