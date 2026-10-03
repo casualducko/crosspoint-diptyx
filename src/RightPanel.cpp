@@ -114,7 +114,7 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
         constexpr int margin = kCoverMargin;
         const int boxW = w - 2 * margin;
         const int boxH = h - 2 * margin;
-        // drawBitmap only scales down, so centre using the scaled size.
+        // drawBitmap only scales down, so center using the scaled size.
         float scale =
             std::min(static_cast<float>(boxW) / bitmap.getWidth(), static_cast<float>(boxH) / bitmap.getHeight());
         if (scale > 1.0f) scale = 1.0f;

@@ -131,8 +131,8 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const char* labels[] = {btn1, btn2, btn3, btn4};
   const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
-  // Diptyx has three bottom buttons (page-left, centre button, page-right): draw Back / Select / Next centred over them
-  // (box centres at x = 66 / 240 / 414 of the 480-wide portrait panel) and drop the Prev slot. Centre button up does the
+  // Diptyx has three bottom buttons (page-left, center button, page-right): draw Back / Select / Next centered over them
+  // (box centers at x = 66 / 240 / 414 of the 480-wide portrait panel) and drop the Prev slot. Center button up does the
   // same, it just has no hint.
   constexpr int diptyxButtonPositions[] = {26, 200, 374};
   const char* diptyxLabels[] = {btn1, btn2, btn4};
@@ -171,7 +171,7 @@ void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   if (gpio.hasTouch()) {
     return;
   }
-  // Diptyx has no side buttons (its centre button up/down still act as the Up/Down keys): draw no side hints.
+  // Diptyx has no side buttons (its center button up/down still act as the Up/Down keys): draw no side hints.
   if (BoardConfig::isDiptyx()) {
     return;
   }

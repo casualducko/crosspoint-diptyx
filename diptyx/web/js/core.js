@@ -128,7 +128,7 @@ export function explainError(err) {
     return { title: 'The USB port is busy or could not be opened.', hint: 'Close any serial monitor or other tab using the Diptyx, unplug and replug it in download mode, then try again.' };
   }
   if (/timeout|no serial data|failed to connect|wrong boot mode|invalid head of packet|sync/i.test(msg)) {
-    return { title: 'The Diptyx did not answer.', hint: 'It is probably not in download mode. Switch it fully off (hold power ~20 s), hold the centre button, plug in the USB-C cable while holding, release after ~3 s, and try again.' };
+    return { title: 'The Diptyx did not answer.', hint: 'It is probably not in download mode. Switch it fully off (hold power ~20 s), hold the center button, plug in the USB-C cable while holding, release after ~3 s, and try again.' };
   }
   if (/disconnect|lost|device has been lost|the device was disconnected/i.test(msg)) return { title: 'The USB cable was disconnected.', hint: 'Plug it back in (download mode) and start again. A cut-off write leaves the app slot incomplete; flashing again, or restoring the stock firmware, fixes it.' };
   if (/Failed to fetch|NetworkError when|Load failed/i.test(msg)) return { title: 'The firmware could not be downloaded.', hint: 'Check your internet connection and try again.' };

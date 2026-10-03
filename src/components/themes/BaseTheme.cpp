@@ -231,8 +231,8 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const char* labels[] = {btn1, btn2, btn3, btn4};
   const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
-  // Diptyx has three bottom buttons (page-left, centre button, page-right): draw Back / Select / Next centred over them
-  // and drop the Prev slot (centre button up does the same, it just has no hint).
+  // Diptyx has three bottom buttons (page-left, center button, page-right): draw Back / Select / Next centered over them
+  // and drop the Prev slot (center button up does the same, it just has no hint).
   constexpr int diptyxButtonPositions[] = {13, 187, 361};
   const char* diptyxLabels[] = {btn1, btn2, btn4};
   const bool threeButtons = BoardConfig::isDiptyx();
@@ -262,7 +262,7 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   if (gpio.hasTouch()) {
     return;
   }
-  // Diptyx has no side buttons (its centre button up/down still act as the Up/Down keys): draw no side hints.
+  // Diptyx has no side buttons (its center button up/down still act as the Up/Down keys): draw no side hints.
   if (BoardConfig::isDiptyx()) {
     return;
   }

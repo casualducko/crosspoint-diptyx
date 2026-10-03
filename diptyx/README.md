@@ -30,11 +30,11 @@ and the rumble motor are unused; no grayscale (the panels are black and white); 
 Flashing needs the chip's built-in bootloader:
 
 1. Unplug USB and switch the device completely off (hold the power button, wait about 20 seconds).
-2. **Hold the centre button pressed in.**
+2. **Hold the center button pressed in.**
 3. While holding it, plug in the USB-C cable. Keep holding for about 3 seconds, then let go. The screens stay as they were; that is normal.
 
 It now shows up on your computer as an *Espressif / USB JTAG/serial debug unit*. To leave download mode, unplug the cable and plug it
-in again **without** touching the centre button.
+in again **without** touching the center button.
 
 ## Option A: the web flasher (easiest)
 
@@ -73,18 +73,18 @@ Other commands: `./flash.sh check` (inspect only, writes nothing), `./flash.sh b
 
 ## After flashing
 
-Unplug the cable and plug it in again without touching the centre button. The left screen shows the CrossPoint home screen; the right screen
+Unplug the cable and plug it in again without touching the center button. The left screen shows the CrossPoint home screen; the right screen
 fills in with the card for your current book after a few seconds.
 
-The Diptyx has five controls: a left button, a centre rocker that presses and moves up and down, and a right button (plus the
+The Diptyx has five controls: a left button, a center rocker that presses and moves up and down, and a right button (plus the
 power button).
 
 | Control | What it does |
 |---|---|
 | Left button (page-left) | Back |
-| Centre button press | Select / open the reader menu |
+| Center button press | Select / open the reader menu |
 | Right button (page-right) | Next / down (next page in a book) |
-| Centre button up / down | Move up / down; in a book, previous / next page |
+| Center button up / down | Move up / down; in a book, previous / next page |
 | Power button | Hold: power off. Hold ~3 s when off: power on. |
 
 - **Sleep:** it sleeps after the idle timeout (or from the menu) and any of the seven buttons wakes it. Holding the power button powers it off
@@ -109,13 +109,13 @@ Your stock settings are untouched by CrossPoint, so the stock firmware comes bac
 ## Troubleshooting
 
 - **"No Espressif USB device found" / cannot connect:** redo the download-mode steps; use a different cable (it must carry data) and port.
-  Plug in the cable *while* holding the centre button, and make sure the device was fully off first.
+  Plug in the cable *while* holding the center button, and make sure the device was fully off first.
 - **Linux, "permission denied":** add yourself to the serial group (`sudo usermod -aG dialout $USER` on Debian/Ubuntu, `uucp` on Arch/Fedora,
   then log out and in) or install the udev rule: `sudo cp 70-diptyx.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger` (then re-plug).
 - **Windows:** no driver is needed on Windows 10/11. If *Device Manager* shows an unknown device, run Windows Update or install the
   Espressif USB JTAG/serial driver.
 - **macOS:** nothing to install. If it asks for permission to access removable devices, allow it.
-- **After flashing it sits in download mode:** unplug, switch off for 20 seconds, plug in again *without* touching the centre button.
+- **After flashing it sits in download mode:** unplug, switch off for 20 seconds, plug in again *without* touching the center button.
 - **Screen contrast looks washed out or too dark:** the display voltage (VCOM) is read from your unit's own settings left by the stock
   firmware (`vcomLeft` / `vcomRight`); if there are none (a unit that never ran the stock firmware) it uses the stock default, 23. The serial
   log shows the values used (`[DIPTYX] left panel VCOM ...`). Open an issue with your stock values if the picture still looks wrong.
