@@ -1,5 +1,6 @@
 #include "EpubReaderPercentSelectionActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <I18n.h>
@@ -134,14 +135,17 @@ void EpubReaderPercentSelectionActivity::loop() {
     return;
   }
 
+  // The Diptyx has no side buttons: the center rocker steps finely and the right button jumps by the large step.
+  const bool diptyx = BoardConfig::isDiptyx();
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustPercent(-kSmallStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustPercent(kSmallStep); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
+                                       [this, diptyx] { adjustPercent(diptyx ? kLargeStep : kSmallStep); });
 
   // On edge-button boards (X3, X4 Pro) the side buttons sit on the left/right edges of the screen rather
   // than as a vertical up/down rocker (X4), so BTN_UP is physically the left button and BTN_DOWN the right
   // one. Flip the large-step direction there so the left button decreases and the right button increases.
-  const int upDelta = gpio.hasEdgeSideButtons() ? -kLargeStep : kLargeStep;
-  const int downDelta = gpio.hasEdgeSideButtons() ? kLargeStep : -kLargeStep;
+  const int upDelta = diptyx ? kSmallStep : (gpio.hasEdgeSideButtons() ? -kLargeStep : kLargeStep);
+  const int downDelta = -upDelta;
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustPercent(upDelta); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
                                        [this, downDelta] { adjustPercent(downDelta); });
@@ -155,9 +159,12 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiScreen& screen) {
   char readout[16];
   snprintf(readout, sizeof(readout), "%d%%", percent);
   char hint1[64];
-  snprintf(hint1, sizeof(hint1), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_FRONT), kSmallStep);
+  const bool diptyx = BoardConfig::isDiptyx();
+  snprintf(hint1, sizeof(hint1), "%s %d%%",
+           I18N.get(diptyx ? StrId::STR_STEP_HINT_CENTER_ROCKER : StrId::STR_STEP_HINT_FRONT), kSmallStep);
   char hint2[64];
-  snprintf(hint2, sizeof(hint2), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_SIDE), kLargeStep);
+  const char* const hint2Label = I18N.get(diptyx ? StrId::STR_STEP_HINT_RIGHT_BUTTON : StrId::STR_STEP_HINT_SIDE);
+  snprintf(hint2, sizeof(hint2), "%s %s%d%%", hint2Label, diptyx ? "+" : "", kLargeStep);
 
   UiSliderDialogSpec spec;
   spec.title = tr(STR_GO_TO_PERCENT);

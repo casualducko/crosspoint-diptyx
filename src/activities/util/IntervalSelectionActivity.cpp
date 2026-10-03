@@ -1,5 +1,6 @@
 #include "IntervalSelectionActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <I18n.h>
@@ -131,14 +132,17 @@ void IntervalSelectionActivity::loop() {
     return;
   }
 
+  // The Diptyx has no side buttons: the center rocker steps finely and the right button jumps by the large step.
+  const bool diptyx = BoardConfig::isDiptyx();
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustValue(-smallStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustValue(smallStep); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
+                                       [this, diptyx] { adjustValue(diptyx ? largeStep : smallStep); });
 
   // On edge-button boards (X3, X4 Pro) the side buttons sit on the left/right edges of the screen rather
   // than as a vertical up/down rocker (X4), so BTN_UP is physically the left button and BTN_DOWN the right
   // one. Flip the large-step direction there so the left button decreases and the right button increases.
-  const int upDelta = gpio.hasEdgeSideButtons() ? -largeStep : largeStep;
-  const int downDelta = gpio.hasEdgeSideButtons() ? largeStep : -largeStep;
+  const int upDelta = diptyx ? smallStep : (gpio.hasEdgeSideButtons() ? -largeStep : largeStep);
+  const int downDelta = -upDelta;
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustValue(upDelta); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
                                        [this, downDelta] { adjustValue(downDelta); });
@@ -168,14 +172,18 @@ void IntervalSelectionActivity::buildIntervalScreen(UiScreen& screen) {
   char hints[2][64];
   char stepText[24];
   int hintIndex = 0;
-  for (const auto& [labelId, step] :
-       {std::pair{StrId::STR_STEP_HINT_FRONT, smallStep}, std::pair{StrId::STR_STEP_HINT_SIDE, largeStep}}) {
+  const bool diptyx = BoardConfig::isDiptyx();
+  const std::pair<StrId, int> hintSteps[2] = {
+      {diptyx ? StrId::STR_STEP_HINT_CENTER_ROCKER : StrId::STR_STEP_HINT_FRONT, smallStep},
+      {diptyx ? StrId::STR_STEP_HINT_RIGHT_BUTTON : StrId::STR_STEP_HINT_SIDE, largeStep}};
+  for (const auto& [labelId, step] : hintSteps) {
     if (valueFormatId != StrId::STR_NONE_OPT) {
       snprintf(stepText, sizeof(stepText), I18N.get(valueFormatId), static_cast<unsigned int>(step));
     } else {
       snprintf(stepText, sizeof(stepText), "%d", step);
     }
-    snprintf(hints[hintIndex], sizeof(hints[hintIndex]), "%s %s", I18N.get(labelId), stepText);
+    snprintf(hints[hintIndex], sizeof(hints[hintIndex]), "%s %s%s", I18N.get(labelId),
+             labelId == StrId::STR_STEP_HINT_RIGHT_BUTTON ? "+" : "", stepText);
     hintIndex++;
   }
 
