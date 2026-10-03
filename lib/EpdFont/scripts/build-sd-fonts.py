@@ -231,6 +231,8 @@ def build_family(
 
     if family.get("force_autohint", False):
         cmd.append("--force-autohint")
+    if family.get("mono", False):
+        cmd.append("--mono")
 
     # Run fontconvert_sdcard.py
     start = time.monotonic()

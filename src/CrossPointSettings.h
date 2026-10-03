@@ -269,7 +269,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t twoPageSpread = 1;
   // Diptyx only: how the black-and-white panel turns anti-aliased glyph shades into ink.
   enum TEXT_SHARPNESS { TEXT_STANDARD = 0, TEXT_SHARP = 1, TEXT_SHARPNESS_COUNT };
-  uint8_t textSharpness = TEXT_SHARP;
+  uint8_t textSharpness = TEXT_STANDARD;  // Sharp drops parts of thin strokes (grainy) on many fonts; mono-hinted fonts are the cleaner route
   // Applies textSharpness to the glyph renderer. Called after the settings load and when the setting changes.
   void applyTextRendering() const;
   // Diptyx only: what the right panel shows while the device sleeps.

@@ -568,7 +568,7 @@ def extract_ligatures_fonttools(font_path, codepoints):
 
 
 def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False,
-                         fallback_fontfile=None):
+                         fallback_fontfile=None, mono=False):
     """Rasterize all glyphs for one font style. Returns StyleRasterData."""
     import freetype
 
@@ -590,6 +590,10 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     load_flags = freetype.FT_LOAD_RENDER
     if force_autohint:
         load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+    if mono:
+        # For black-and-white panels: monochrome hinted glyphs (stems fitted to whole pixels, no gray fringe) and the
+        # hinted whole-pixel advances. The 2-bit output then only holds 0 and 3.
+        load_flags |= freetype.FT_LOAD_TARGET_MONO
 
     def load_glyph(code_point):
         glyph_index = face.get_char_index(code_point)
@@ -660,7 +664,10 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             for y in range(bitmap.rows):
                 row_offset = y * abs_pitch if bitmap.pitch >= 0 else (bitmap.rows - 1 - y) * abs_pitch
                 for x in range(bitmap.width):
-                    v = buf[row_offset + x]
+                    if bitmap.pixel_mode == freetype.FT_PIXEL_MODE_MONO:
+                        v = 255 if (buf[row_offset + (x >> 3)] >> (7 - (x & 7))) & 1 else 0
+                    else:
+                        v = buf[row_offset + x]
                     if x % 2 == 0:
                         px = (v >> 4)
                     else:
@@ -704,7 +711,8 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
             glyph = GlyphProps(
                 width=bitmap.width,
                 height=bitmap.rows,
-                advance_x=fp4_from_ft16_16(f.glyph.linearHoriAdvance),
+                advance_x=(fp4_from_ft16_16(((f.glyph.advance.x + 32) >> 6) << 16) if mono
+                           else fp4_from_ft16_16(f.glyph.linearHoriAdvance)),
                 left=f.glyph.bitmap_left,
                 top=f.glyph.bitmap_top,
                 data_length=len(packed),
@@ -827,7 +835,7 @@ def style_sections_total_size(sections):
 # --- File writers ---
 
 def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
-                               force_autohint=False, fallback_style_fonts=None):
+                               force_autohint=False, fallback_style_fonts=None, mono=False):
     """Generate a multi-style v4 .cpfont file.
 
     style_fonts: dict of {style_id: fontfile_path} e.g. {0: "Regular.ttf", 2: "Italic.ttf"}
@@ -849,7 +857,7 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
         raster_data[style_id] = rasterize_font_style(
             fontfile, size, intervals, style_id=style_id,
             force_autohint=force_autohint,
-            fallback_fontfile=fallback_fontfile)
+            fallback_fontfile=fallback_fontfile, mono=mono)
 
     # Pack binary sections for each style
     packed_sections = {}  # style_id -> tuple of section bytearrays
@@ -944,6 +952,8 @@ def main():
                         help="Font family name for output filenames (default: derived from font filename).")
     parser.add_argument("--force-autohint", dest="force_autohint", action="store_true",
                         help="Force FreeType auto-hinter instead of native font hinting.")
+    parser.add_argument("--mono", dest="mono", action="store_true",
+                        help="Render monochrome-hinted glyphs with whole-pixel advances (for black-and-white panels).")
     parser.add_argument("-o", "--output", dest="output",
                         help="Output file path (for single-size mode).")
     parser.add_argument("--output-dir", dest="output_dir",
@@ -1067,7 +1077,7 @@ def main():
         total_size += generate_cpfont_multistyle(
             style_fonts, sz, intervals, output_path,
             force_autohint=args.force_autohint,
-            fallback_style_fonts=fallback_style_fonts)
+            fallback_style_fonts=fallback_style_fonts, mono=args.mono)
     print(f"\nTotal: {len(sizes)} files, {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
 
 
