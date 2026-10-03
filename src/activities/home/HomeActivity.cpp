@@ -223,6 +223,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
+  if (showingLoading && BoardConfig::isDiptyx()) {
+    popupGhostPending = true;
+    requestUpdate();
+  }
   recentsLoaded = true;
   recentsLoading = false;
 }
@@ -473,8 +477,9 @@ void HomeActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(hasContinueReading ? tr(STR_RESUME) : "", tr(STR_SELECT),
                                               tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
-                                                                   : HalDisplay::FAST_REFRESH);
+    renderer.displayBuffer((cleanInitialRefresh && !firstRenderDone) || popupGhostPending ? HalDisplay::HALF_REFRESH
+                                                                                          : HalDisplay::FAST_REFRESH);
+    popupGhostPending = false;
     // Slot heights are recorded during the draw above; a change (first layout
     // pass, orientation switch) means the paths must point at those sizes and
     // any missing thumbs must be generated. Refreshing the paths right away
@@ -546,7 +551,9 @@ void HomeActivity::render(RenderLock&&) {
                                             tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer((cleanInitialRefresh && !firstRenderDone) || popupGhostPending ? HalDisplay::HALF_REFRESH
+                                                                                        : HalDisplay::FAST_REFRESH);
+  popupGhostPending = false;
 
   if (!firstRenderDone) {
     firstRenderDone = true;
