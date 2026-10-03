@@ -75,12 +75,14 @@ constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
 static bool wakePowerReleasePending = false;
 
 // Fonts
-EpdFont notoserif14RegularFont(&notoserif_14_regular);
-EpdFont notoserif14BoldFont(&notoserif_14_bold);
-EpdFont notoserif14ItalicFont(&notoserif_14_italic);
-EpdFont notoserif14BoldItalicFont(&notoserif_14_bolditalic);
-EpdFontFamily notoserif14FontFamily(&notoserif14RegularFont, &notoserif14BoldFont, &notoserif14ItalicFont,
-                                    &notoserif14BoldItalicFont);
+// The serif reading font is Literata, monochrome-hinted (the Diptyx panels are black and white only). 14 pt is always
+// built in (the reader's fallback); the other sizes drop out with OMIT_FONTS.
+EpdFont literataMono14RegularFont(&literatamono_14_regular);
+EpdFont literataMono14BoldFont(&literatamono_14_bold);
+EpdFont literataMono14ItalicFont(&literatamono_14_italic);
+EpdFont literataMono14BoldItalicFont(&literatamono_14_bolditalic);
+EpdFontFamily literataMono14FontFamily(&literataMono14RegularFont, &literataMono14BoldFont, &literataMono14ItalicFont,
+                                       &literataMono14BoldItalicFont);
 #ifndef OMIT_FONTS
 EpdFont literataMono10RegularFont(&literatamono_10_regular);
 EpdFont literataMono10BoldFont(&literatamono_10_bold);
@@ -88,24 +90,24 @@ EpdFont literataMono10ItalicFont(&literatamono_10_italic);
 EpdFont literataMono10BoldItalicFont(&literatamono_10_bolditalic);
 EpdFontFamily literataMono10FontFamily(&literataMono10RegularFont, &literataMono10BoldFont, &literataMono10ItalicFont,
                                        &literataMono10BoldItalicFont);
-EpdFont notoserif12RegularFont(&notoserif_12_regular);
-EpdFont notoserif12BoldFont(&notoserif_12_bold);
-EpdFont notoserif12ItalicFont(&notoserif_12_italic);
-EpdFont notoserif12BoldItalicFont(&notoserif_12_bolditalic);
-EpdFontFamily notoserif12FontFamily(&notoserif12RegularFont, &notoserif12BoldFont, &notoserif12ItalicFont,
-                                    &notoserif12BoldItalicFont);
-EpdFont notoserif16RegularFont(&notoserif_16_regular);
-EpdFont notoserif16BoldFont(&notoserif_16_bold);
-EpdFont notoserif16ItalicFont(&notoserif_16_italic);
-EpdFont notoserif16BoldItalicFont(&notoserif_16_bolditalic);
-EpdFontFamily notoserif16FontFamily(&notoserif16RegularFont, &notoserif16BoldFont, &notoserif16ItalicFont,
-                                    &notoserif16BoldItalicFont);
-EpdFont notoserif18RegularFont(&notoserif_18_regular);
-EpdFont notoserif18BoldFont(&notoserif_18_bold);
-EpdFont notoserif18ItalicFont(&notoserif_18_italic);
-EpdFont notoserif18BoldItalicFont(&notoserif_18_bolditalic);
-EpdFontFamily notoserif18FontFamily(&notoserif18RegularFont, &notoserif18BoldFont, &notoserif18ItalicFont,
-                                    &notoserif18BoldItalicFont);
+EpdFont literataMono12RegularFont(&literatamono_12_regular);
+EpdFont literataMono12BoldFont(&literatamono_12_bold);
+EpdFont literataMono12ItalicFont(&literatamono_12_italic);
+EpdFont literataMono12BoldItalicFont(&literatamono_12_bolditalic);
+EpdFontFamily literataMono12FontFamily(&literataMono12RegularFont, &literataMono12BoldFont, &literataMono12ItalicFont,
+                                       &literataMono12BoldItalicFont);
+EpdFont literataMono16RegularFont(&literatamono_16_regular);
+EpdFont literataMono16BoldFont(&literatamono_16_bold);
+EpdFont literataMono16ItalicFont(&literatamono_16_italic);
+EpdFont literataMono16BoldItalicFont(&literatamono_16_bolditalic);
+EpdFontFamily literataMono16FontFamily(&literataMono16RegularFont, &literataMono16BoldFont, &literataMono16ItalicFont,
+                                       &literataMono16BoldItalicFont);
+EpdFont literataMono18RegularFont(&literatamono_18_regular);
+EpdFont literataMono18BoldFont(&literatamono_18_bold);
+EpdFont literataMono18ItalicFont(&literatamono_18_italic);
+EpdFont literataMono18BoldItalicFont(&literatamono_18_bolditalic);
+EpdFontFamily literataMono18FontFamily(&literataMono18RegularFont, &literataMono18BoldFont, &literataMono18ItalicFont,
+                                       &literataMono18BoldItalicFont);
 
 EpdFont notosans12RegularFont(&notosans_12_regular);
 EpdFont notosans12BoldFont(&notosans_12_bold);
@@ -416,12 +418,12 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(NOTOSERIF_14_FONT_ID, notoserif14FontFamily);
+  renderer.insertFont(LITERATAMONO_14_FONT_ID, literataMono14FontFamily);
 #ifndef OMIT_FONTS
   renderer.insertFont(LITERATAMONO_10_FONT_ID, literataMono10FontFamily);
-  renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
-  renderer.insertFont(NOTOSERIF_16_FONT_ID, notoserif16FontFamily);
-  renderer.insertFont(NOTOSERIF_18_FONT_ID, notoserif18FontFamily);
+  renderer.insertFont(LITERATAMONO_12_FONT_ID, literataMono12FontFamily);
+  renderer.insertFont(LITERATAMONO_16_FONT_ID, literataMono16FontFamily);
+  renderer.insertFont(LITERATAMONO_18_FONT_ID, literataMono18FontFamily);
 
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
@@ -594,12 +596,9 @@ void setup() {
   if (gpio.hasTouch()) {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
-  // Diptyx stock reading font: Literata Mono, built in, 10 pt. Seeded before the load, like the reader menu style below
-  // it, so a saved choice still wins and only a fresh install gets it.
-  if (BoardConfig::isDiptyx()) {
-    SETTINGS.fontFamily = CrossPointSettings::LITERATAMONO;
-    SETTINGS.fontPointSize = 10;
-  }
+  // Diptyx stock reading font: Literata Mono (the built-in serif family) at 10 pt. Seeded before the load, like the
+  // reader menu style below it, so a saved choice still wins and only a fresh install gets it.
+  if (BoardConfig::isDiptyx()) SETTINGS.fontPointSize = 10;
   SETTINGS.loadFromFile();
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).

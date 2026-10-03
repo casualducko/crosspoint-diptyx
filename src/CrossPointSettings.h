@@ -106,10 +106,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
-  // LITERATAMONO: Literata, monochrome-hinted, built in at 10 pt only (the Diptyx default).
-  enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, LITERATAMONO = 2, FONT_FAMILY_COUNT };
-  // Files from 1.4 and earlier stored 2 for OpenDyslexic; since LITERATAMONO took that value, new files carry
-  // fontFamilyScheme (see toJson) and only a file without it is read with the old meaning.
+  // LITERATA (the serif slot, upstream's Noto Serif) is Literata, monochrome-hinted, built in at 10-18 pt.
+  enum FONT_FAMILY { LITERATA = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Reader font size is a point size, not an enum slot — see fontPointSize.
@@ -300,7 +298,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
-  uint8_t fontFamily = NOTOSERIF;
+  uint8_t fontFamily = LITERATA;
   // Point size of the reader font. Only sizes the active family actually ships
   // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.

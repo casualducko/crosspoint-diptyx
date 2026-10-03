@@ -21,13 +21,13 @@ struct PointSizeSet {
   size_t count;
 };
 
-// Literata Mono is built in at 10 pt only.
-inline constexpr uint8_t BUILTIN_LITERATA_POINT_SIZES[] = {10};
+// The serif family (Literata Mono) also ships 10 pt; Noto Sans stays at upstream's sizes.
+inline constexpr uint8_t BUILTIN_SERIF_POINT_SIZES[] = {10, 12, 14, 16, 18};
 
-// The sizes the active built-in family ships: Noto Serif or Noto Sans (the upstream set), or Literata Mono (10 pt only).
-inline PointSizeSet builtinReaderPointSizes(const bool literata) {
-  return literata ? PointSizeSet{BUILTIN_LITERATA_POINT_SIZES, std::size(BUILTIN_LITERATA_POINT_SIZES)}
-                  : PointSizeSet{BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES)};
+// The sizes the active built-in family ships.
+inline PointSizeSet builtinReaderPointSizes(const bool sans) {
+  return sans ? PointSizeSet{BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES)}
+              : PointSizeSet{BUILTIN_SERIF_POINT_SIZES, std::size(BUILTIN_SERIF_POINT_SIZES)};
 }
 
 // Vector (.ttf/.otf) fonts offer every whole point size from 8 through 22.

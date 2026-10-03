@@ -17,39 +17,39 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSERIF_12_FONT_ID ($(
+echo "#define LITERATAMONO_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notoserif_12_regular.h",
-  "./notoserif_12_bold.h",
-  "./notoserif_12_bolditalic.h",
-  "./notoserif_12_italic.h",
+  "./literatamono_12_regular.h",
+  "./literatamono_12_bold.h",
+  "./literatamono_12_bolditalic.h",
+  "./literatamono_12_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSERIF_14_FONT_ID ($(
+echo "#define LITERATAMONO_14_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notoserif_14_regular.h",
-  "./notoserif_14_bold.h",
-  "./notoserif_14_bolditalic.h",
-  "./notoserif_14_italic.h",
+  "./literatamono_14_regular.h",
+  "./literatamono_14_bold.h",
+  "./literatamono_14_bolditalic.h",
+  "./literatamono_14_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSERIF_16_FONT_ID ($(
+echo "#define LITERATAMONO_16_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notoserif_16_regular.h",
-  "./notoserif_16_bold.h",
-  "./notoserif_16_bolditalic.h",
-  "./notoserif_16_italic.h",
+  "./literatamono_16_regular.h",
+  "./literatamono_16_bold.h",
+  "./literatamono_16_bolditalic.h",
+  "./literatamono_16_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define NOTOSERIF_18_FONT_ID ($(
+echo "#define LITERATAMONO_18_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./notoserif_18_regular.h",
-  "./notoserif_18_bold.h",
-  "./notoserif_18_bolditalic.h",
-  "./notoserif_18_italic.h",
+  "./literatamono_18_regular.h",
+  "./literatamono_18_bold.h",
+  "./literatamono_18_bolditalic.h",
+  "./literatamono_18_italic.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
@@ -110,10 +110,11 @@ ruby -rdigest -e 'puts [
 ))"
 
 FONT_ID_NAMES=(
-  NOTOSERIF_12_FONT_ID
-  NOTOSERIF_14_FONT_ID
-  NOTOSERIF_16_FONT_ID
-  NOTOSERIF_18_FONT_ID
+  LITERATAMONO_10_FONT_ID
+  LITERATAMONO_12_FONT_ID
+  LITERATAMONO_14_FONT_ID
+  LITERATAMONO_16_FONT_ID
+  LITERATAMONO_18_FONT_ID
   NOTOSANS_12_FONT_ID
   NOTOSANS_14_FONT_ID
   NOTOSANS_16_FONT_ID

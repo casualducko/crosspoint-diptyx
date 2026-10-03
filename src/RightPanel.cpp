@@ -155,7 +155,7 @@ void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
   r.clearScreen();
   const int textWidth = w - 140;
   int y = h * 38 / 100;
-  drawCentered(r, NOTOSERIF_14_FONT_ID, card.title, y, 4, textWidth);
+  drawCentered(r, LITERATAMONO_14_FONT_ID, card.title, y, 4, textWidth);
   if (!card.author.empty()) {
     y += 14;
     r.drawLine(w / 2 - 22, y, w / 2 + 22, y, true);

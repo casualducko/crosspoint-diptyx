@@ -5,15 +5,16 @@ set -e
 cd "$(dirname "$0")"
 
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
-NOTOSERIF_FONT_SIZES=(12 14 16 18)
+LITERATA_FONT_SIZES=(10 12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
 
-for size in ${NOTOSERIF_FONT_SIZES[@]}; do
+# Literata, monochrome-hinted for the black-and-white Diptyx panels: the built-in serif family.
+for size in ${LITERATA_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
-    font_name="notoserif_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../builtinFonts/source/NotoSerif/NotoSerif-${style}.ttf"
+    font_name="literatamono_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
+    font_path="../builtinFonts/source/Literata/Literata-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli --mono > $output_path
     echo "Generated $output_path"
   done
 done
@@ -26,15 +27,6 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
     python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli > $output_path
     echo "Generated $output_path"
   done
-done
-
-# Literata, monochrome-hinted for the black-and-white Diptyx panels (10 pt only; the built-in default font there).
-for style in ${READER_FONT_STYLES[@]}; do
-  font_name="literatamono_10_$(echo $style | tr '[:upper:]' '[:lower:]')"
-  font_path="../builtinFonts/source/Literata/Literata-${style}.ttf"
-  output_path="../builtinFonts/${font_name}.h"
-  python fontconvert.py $font_name 10 $font_path --2bit --compress --pnum --zopfli --mono > $output_path
-  echo "Generated $output_path"
 done
 
 UI_FONT_SIZES=(10 12)

@@ -1,8 +1,8 @@
 # Diptyx font pack
 
 Nine reader font families, all **mono-hinted** and prebuilt as CrossPoint SD-card fonts (`.cpfont`, format version 4) at 10, 12, 14,
-16 and 18 pt (about 30 MB for everything; copy only what you want). The firmware also has **Literata Mono at 10 pt built in**, which
-is the stock reading font, so nothing here is needed to get crisp text; this pack adds more families and sizes.
+16 and 18 pt (about 30 MB for everything; copy only what you want). The firmware also has **Literata Mono built in at 10 to 18 pt** (its
+serif family), and 10 pt is the stock reading size, so nothing here is needed to get crisp text; this pack adds more families.
 
 ## Why mono-hinted
 
