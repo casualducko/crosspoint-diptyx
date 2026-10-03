@@ -11,9 +11,8 @@
 <body>
 <main>
   <header>
-    <h1>CrossPoint for the Diptyx</h1>
-    <p class="lede">Install the open-source <a href="https://github.com/crosspoint-reader/crosspoint-reader">CrossPoint</a> reader on your Diptyx dual-screen e-reader, straight from the browser.
-      <span class="badge">Unofficial &middot; early beta</span></p>
+    <h1>CrossPoint for the Diptyx <span class="badge">Unofficial &middot; early beta</span></h1>
+    <p class="lede">Install the CrossPoint e-reader firmware on your Diptyx from the browser. It takes about a minute.</p>
   </header>
 
   <div id="unsupported" class="notice bad" hidden>
@@ -26,16 +25,16 @@
   <section class="card" aria-labelledby="s1">
     <h2 id="s1"><span class="n">1</span> Put the Diptyx in download mode</h2>
     <ol class="steps">
-      <li>Unplug USB and switch the Diptyx <strong>completely off</strong>: hold the power button for about 20 seconds.</li>
+      <li>Unplug USB and switch the Diptyx <strong>completely off</strong> (hold the power button for about 20 seconds).</li>
       <li><strong>Hold the center button pressed in.</strong></li>
-      <li>While holding it, plug in the <strong>USB-C data cable</strong>. Keep holding for about 3 seconds, then let go.</li>
+      <li>Keep holding it while you plug in the <strong>USB-C data cable</strong>, for about 3 seconds, then let go.</li>
     </ol>
-    <p class="hint">The screens don't change in download mode, that's normal. Use a cable that carries data (a charge-only cable won't work).</p>
+    <p class="hint">The screens stay as they were in download mode. A charge-only cable won't work.</p>
   </section>
 
   <section class="card" aria-labelledby="s2">
     <h2 id="s2"><span class="n">2</span> Connect</h2>
-    <p>Click the button, choose <em>USB JTAG/serial debug unit</em> in the list, and wait for the checks.</p>
+    <p>Click the button, pick <em>USB JTAG/serial debug unit</em> in the list, and wait for the checks.</p>
     <button id="connect" class="primary" type="button">Connect to my Diptyx</button>
     <ul id="checks" class="checks" aria-live="polite" hidden></ul>
   </section>
@@ -47,7 +46,7 @@
       <button id="install" class="primary" type="button">Install CrossPoint</button>
       <button id="backup" type="button" title="Reads the current app (about 3 minutes) and saves it as a file">Save a copy of my current firmware first</button>
     </div>
-    <p class="hint">Installing writes <strong>only the app slot</strong> (0x10000). Your bootloader, partition table, settings and books are not touched.</p>
+    <p class="hint">Only the app slot (0x10000) is written. Your bootloader, partition table, settings and books are not touched.</p>
     <details>
       <summary>Other options</summary>
       <div class="row">
@@ -88,8 +87,7 @@
   <footer>
     <p>Version <span id="v">&hellip;</span> &middot; <a href="https://github.com/casualducko/crosspoint-diptyx/blob/main/diptyx/README.md">Guide</a> &middot;
       <a href="https://github.com/casualducko/crosspoint-diptyx">Source</a> &middot; <a href="https://github.com/casualducko/crosspoint-diptyx/blob/main/NOTICE">Licences</a></p>
-    <p>An unofficial port. Not affiliated with the Diptyx makers or the CrossPoint project. Use at your own risk. Everything runs in your browser; no data is sent anywhere
-      except the firmware download.</p>
+    <p>An unofficial port, not affiliated with the Diptyx makers or the CrossPoint project. Use at your own risk. Everything runs in your browser; the only download is the firmware.</p>
   </footer>
 </main>
 <script type="module" src="js/ui.js"></script>
