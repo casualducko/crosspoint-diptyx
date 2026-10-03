@@ -135,7 +135,12 @@ def extract_static_instance(source_path: Path, axes: dict, family_name: str, sty
     #                          so the work would be wasted.
     source_font = TTFont(str(source_path))
     try:
-        font = instantiateVariableFont(source_font, axes, updateFontNames=True, optimize=False)
+        try:
+            font = instantiateVariableFont(source_font, axes, updateFontNames=True, optimize=False)
+        except Exception:
+            # An in-between weight (say 450) has no named STAT entry to rename the font after; the names do not
+            # matter for rasterizing, so pin the axes without touching the name table.
+            font = instantiateVariableFont(source_font, axes, updateFontNames=False, optimize=False)
         try:
             font.save(str(tmp_path))
         finally:
