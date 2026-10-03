@@ -131,5 +131,8 @@ on top of each CrossPoint release; see `CHANGES.md` in the port repository for e
 
 ## Credits and licence
 
-CrossPoint is MIT licensed (see `LICENSE`); the FreeInk SDK has its own licence in its repository; the stock Diptyx firmware and hardware are by
-the Diptyx makers. This port keeps the upstream licences.
+CrossPoint is MIT licensed (see `LICENSE`); the FreeInk SDK is MIT licensed in its own repository; the stock Diptyx firmware (MIT, Copyright (c) 2026
+Diptyx) and hardware are by the Diptyx makers, and the Diptyx driver and settings in this port derive from it. **The compiled firmware also contains
+third-party libraries, notably wolfSSL under the GPL-2.0, so the binary as a whole is distributed under the GPL-2.0, and the complete corresponding
+source is this repository at the release tag.** See [`NOTICE`](../NOTICE) for every licence, the written source offer, and the licence texts in
+[`licenses/`](licenses/). This is an unofficial port: no endorsement by the CrossPoint project, FreeInk or the Diptyx makers is implied.
