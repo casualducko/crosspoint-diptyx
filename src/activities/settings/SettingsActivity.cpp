@@ -228,10 +228,6 @@ void SettingsActivity::onExit() {
 void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr) {
   // Theme changes take effect immediately, on this screen — reload the theme
   // and re-derive the app's tokens so the very next repaint is in the new look.
-  if (valuePtr == &CrossPointSettings::textSharpness) {
-    SETTINGS.applyTextRendering();  // glyph rendering changes at once; the next repaint uses it
-    return;
-  }
   if (valuePtr != &CrossPointSettings::uiTheme) {
     return;
   }

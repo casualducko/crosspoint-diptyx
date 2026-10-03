@@ -237,9 +237,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_RIGHT_SLEEP_SCREEN, &CrossPointSettings::rightSleepScreen,
                           {StrId::STR_RIGHT_SLEEP_IDLE_IMAGE, StrId::STR_RIGHT_SLEEP_TITLE_AUTHOR}, "rightSleepScreen",
                           StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_TEXT_SHARPNESS, &CrossPointSettings::textSharpness,
-                          {StrId::STR_TEXT_SHARPNESS_STANDARD, StrId::STR_TEXT_SHARPNESS_SHARP}, "textSharpness",
-                          StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
                           {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
                           StrId::STR_CAT_DISPLAY),
@@ -516,8 +513,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_TWO_PAGE_SPREAD);
     // The right-screen sleep choice needs the Diptyx's second panel.
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_SLEEP_SCREEN);
-    // Text sharpness is for the Diptyx's black-and-white panels.
-    if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_TEXT_SHARPNESS);
     return v;
   }();
 
