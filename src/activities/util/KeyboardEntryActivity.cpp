@@ -1,6 +1,7 @@
 #include "KeyboardEntryActivity.h"
 
 #include <BidiUtils.h>
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 
@@ -20,12 +21,17 @@ constexpr fui::ActionId ACTION_KEY = 1;
 constexpr int KEYBOARD_MIN_GAP = 6;
 constexpr int KEYBOARD_PANEL_PADDING = 4;
 constexpr int BUTTON_KEY_HEIGHT = 42;
+// The Diptyx's button-only keyboard has room for taller keys: at 42 px the number row's digit and its symbol ("1" and
+// "!") overlap, since the small symbol and the body-font digit need about 46 px between them.
+constexpr int DIPTYX_BUTTON_KEY_HEIGHT = 50;
+
+int buttonKeyHeight() { return BoardConfig::isDiptyx() ? DIPTYX_BUTTON_KEY_HEIGHT : BUTTON_KEY_HEIGHT; }
 constexpr int BUTTON_KEYBOARD_HINT_GAP = 4;
 
 int keyboardGap(const ThemeMetrics& metrics) { return std::max(metrics.keyboardKeySpacing, KEYBOARD_MIN_GAP); }
 
 int keyboardKeysHeight(const ThemeMetrics& metrics, const int rows, const bool hasTouch) {
-  const int keyHeight = hasTouch ? metrics.keyboardKeyHeight : BUTTON_KEY_HEIGHT;
+  const int keyHeight = hasTouch ? metrics.keyboardKeyHeight : buttonKeyHeight();
   return rows * keyHeight + (rows > 1 ? (rows - 1) * keyboardGap(metrics) : 0) + KEYBOARD_PANEL_PADDING * 2;
 }
 
@@ -932,9 +938,14 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   }
 
   if (tipCount > 0) {
-    int y = (underlineBottom + kbRect.y) / 2 - (tipCount + 1) * tipsLh / 2;
-    drawTip(tr(STR_KB_TIPS), y);
-    y += tipsLh;
+    // With taller keys there may be too little room for the "Tips" title as well; drop the title rather than let the
+    // tips run into the text field.
+    const bool showTipsTitle = (tipCount + 1) * tipsLh <= kbRect.y - underlineBottom;
+    int y = (underlineBottom + kbRect.y) / 2 - (tipCount + (showTipsTitle ? 1 : 0)) * tipsLh / 2;
+    if (showTipsTitle) {
+      drawTip(tr(STR_KB_TIPS), y);
+      y += tipsLh;
+    }
     if (cursorMode) {
       drawTip(tr(STR_KB_HINT_RETURN_KEYBOARD), y);
     } else if (urlPanel) {

@@ -1,5 +1,6 @@
 #include "RoundedRaffTheme.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
@@ -216,6 +217,25 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int groupWidth = (pageWidth - sidePadding * 2 - groupGap) / 2;
   const int hintY = pageHeight - hintHeight - bottomMargin;
   const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
+
+  // Diptyx has three bottom buttons (page-left, center button, page-right): one pill over each, with Back / Select / Next
+  // (box centers at x = 66 / 240 / 414 of the 480-wide portrait panel); the Prev slot is dropped.
+  if (BoardConfig::isDiptyx()) {
+    constexpr int kCenters[] = {66, 240, 414};
+    constexpr int kBoxWidth = 104;
+    const char* labels[] = {btn1, btn2, btn4};
+    const bool grayPass = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
+    const int labelYOffset = (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
+    for (int i = 0; i < 3; i++) {
+      const int x = kCenters[i] - kBoxWidth / 2;
+      renderer.fillRect(x, hintY, kBoxWidth, hintHeight, grayPass);
+      if (grayPass || labels[i] == nullptr || labels[i][0] == '\0') continue;
+      renderer.drawRoundedRect(x, hintY, kBoxWidth, hintHeight, 2, kBottomRadius, true);
+      drawHintLabel(renderer, kGuideFontId, labels[i], x, kBoxWidth, hintY, hintHeight, labelYOffset);
+    }
+    renderer.setOrientation(origOrientation);
+    return;
+  }
 
   if (renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute()) {
     renderer.fillRect(sidePadding, hintY, groupWidth, hintHeight, true);
