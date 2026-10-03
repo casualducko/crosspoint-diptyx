@@ -39,12 +39,6 @@ jobs:
             "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
             "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
             "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-diptyx-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-diptyx-${{ runner.os }}-
       - name: Pin pioarduino core inside the platform penv
         run: |
           set -euo pipefail
@@ -52,6 +46,10 @@ jobs:
           uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
       - name: Build
         run: pio run -e diptyx
+      - name: Web flasher tests
+        run: node --test diptyx/web/test/*.test.mjs
+        env:
+          FIRMWARE_BIN: .pio/build/diptyx/firmware.bin
       - name: Package release assets and the web flasher
         run: |
           set -euo pipefail
@@ -87,7 +85,7 @@ jobs:
             'Licences: the firmware contains third-party libraries, notably wolfSSL under the GPL-2.0, so the binary is distributed under the GPL-2.0. The complete corresponding source is this repository at this release tag (with its freeink-sdk submodule); see the attached `NOTICE.txt` for all licences and the written source offer.' \
             > release-notes.md
       - uses: actions/upload-pages-artifact@v4
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' && !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'dev')
         with:
           path: site
       - name: Create or update the GitHub release
@@ -107,8 +105,9 @@ jobs:
           fi
 
   deploy-pages:
-    # Only a tagged release may replace the public web flasher; a manual run from a branch must never do that.
-    if: github.ref_type == 'tag'
+    # Only a stable tagged release may replace the public web flasher: not a manual run from a branch, and not a
+    # pre-release (rc / beta / dev) tag, which stays a GitHub pre-release only.
+    if: github.ref_type == 'tag' && !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'dev')
     needs: build
     runs-on: ubuntu-latest
     permissions:

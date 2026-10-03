@@ -13,7 +13,7 @@ echo Setting up a private environment (one time, needs internet)...
 if exist "%VENV%" rmdir /s /q "%VENV%"
 py -3 -m venv "%VENV%" || goto fail
 "%VENV%\Scripts\python.exe" -m pip install --quiet --upgrade pip || goto fail
-"%VENV%\Scripts\python.exe" -m pip install --quiet --upgrade "esptool>=5" || goto fail
+"%VENV%\Scripts\python.exe" -m pip install --quiet --upgrade "esptool>=5,<6" || goto fail
 echo.>"%VENV%\.ready"
 :run
 "%VENV%\Scripts\python.exe" "%HERE%flash.py" %*

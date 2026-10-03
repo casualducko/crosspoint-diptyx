@@ -36,12 +36,27 @@ test('broken images are refused with a clear reason', async () => {
   const noDigest = good.slice(); noDigest[noDigest.length - 5] ^= 1; await reject(noDigest, /digest/);
 });
 
+test('bootloaders, merged images and images with trailing data are refused', async () => {
+  const good = await makeImage();
+  const reject = (bytes, re) => assert.rejects(validateAppImage(bytes), (e) => e.code === 'bad-image' && re.test(e.message));
+  const noDesc = good.slice(); noDesc[32] ^= 0xff; // a bootloader-like image: valid structure, no app descriptor
+  // recompute is not needed for this branch: the descriptor check runs before the checksum
+  await reject(noDesc, /not an app image/);
+  const merged = new Uint8Array(good.length + 64); merged.set(good); merged[good.length + 10] = 0x12;
+  await reject(merged, /extra data/);
+  const padded = new Uint8Array(good.length + 64).fill(0xff); padded.set(good);
+  assert.equal((await validateAppImage(padded)).size, padded.length, 'an all-0xFF tail (erased flash) is fine');
+});
+
 test('parseManifest', () => {
   const sha = 'a'.repeat(64);
   assert.deepEqual(parseManifest({ version: '1', firmware: { path: 'firmware/x.bin', size: 5, sha256: sha } }).firmware, { path: 'firmware/x.bin', size: 5, sha256: sha });
   assert.equal(parseManifest({ version: 'dev' }).firmware, null);
   assert.throws(() => parseManifest({ firmware: { path: 'https://evil/x.bin', size: 5, sha256: sha } }), /not allowed/);
   assert.throws(() => parseManifest({ firmware: { path: '../x.bin', size: 5, sha256: sha } }), /not allowed/);
+  for (const bad of ['\\\\host\\share\\x.bin', '/abs/x.bin', 'fire\tware/x.bin', 'javascript:alert(1)', 'a\\b.bin']) {
+    assert.throws(() => parseManifest({ firmware: { path: bad, size: 5, sha256: sha } }), /not allowed/, bad);
+  }
   assert.throws(() => parseManifest(null));
 });
 

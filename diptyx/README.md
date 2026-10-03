@@ -60,7 +60,7 @@ Works the same on Windows, macOS and Linux. It needs **Python 3.10 or newer** (h
 |---|---|
 | macOS / Linux | `./flash.sh` |
 | Windows | `flash.bat` (double-click it, or run it in *Command Prompt* / *PowerShell*) |
-| Any (if you manage Python yourself) | `python -m pip install --upgrade "esptool>=5"` then `python flash.py` |
+| Any (if you manage Python yourself) | `python -m pip install --upgrade "esptool>=5,<6"` then `python flash.py` |
 
 The first run sets up a private Python environment inside the folder (nothing is installed system-wide). Then it:
 

@@ -33,3 +33,8 @@ lib/EpdFont/scripts/output/
 sdkconfig.sticky
 sdkconfig.x4pro
 flake.*
+
+# Diptyx flasher: its private Python environment and the backups it makes (they hold the device's settings)
+diptyx/.flasher-venv/
+diptyx-flash-backup-*.bin
+diptyx-app-backup-*.bin

@@ -16,7 +16,7 @@ if [ ! -f "$VENV/.ready" ]; then
   echo "Setting up a private environment (one time, needs internet)..."
   rm -rf "$VENV"
   "$PY" -m venv "$VENV" || { echo "Could not create a Python virtual environment (Debian/Ubuntu: sudo apt install python3-venv)."; rm -rf "$VENV"; exit 1; }
-  { "$VENV/bin/python" -m pip install --quiet --upgrade pip && "$VENV/bin/python" -m pip install --quiet --upgrade "esptool>=5"; } || {
+  { "$VENV/bin/python" -m pip install --quiet --upgrade pip && "$VENV/bin/python" -m pip install --quiet --upgrade "esptool>=5,<6"; } || {
     echo "Installing esptool failed (it needs an internet connection and Python 3.10+)."; rm -rf "$VENV"; exit 1; }
   touch "$VENV/.ready"
 fi

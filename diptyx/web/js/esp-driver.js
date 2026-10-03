@@ -65,10 +65,21 @@ export class EspDriver {
     await this.loader.after('hard_reset');
   }
 
+  // Releases the serial port. esptool-js's disconnect() waits for its streams to unlock with no timeout, so it is raced
+  // against a timer; if the port is still open afterwards it is closed directly so the next connect does not find it busy.
   async disconnect() {
-    try { if (this.transport) await this.transport.disconnect(); } catch { /* already gone */ }
+    const transport = this.transport;
+    const port = this.port;
     this.transport = null;
     this.loader = null;
     this.port = null;
+    if (transport) {
+      try {
+        await Promise.race([transport.disconnect(), new Promise((resolve) => setTimeout(resolve, 3000))]);
+      } catch { /* already gone */ }
+    }
+    if (port && (port.readable || port.writable)) {
+      try { await port.close(); } catch { /* still locked; the user can replug */ }
+    }
   }
 }

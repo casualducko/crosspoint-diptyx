@@ -9,11 +9,12 @@ export const PTABLE_LEN = 0xc00;
 // SHA-256 of the 3 KB partition table at 0x8000 in the stock Diptyx firmware (1.0.1, 1.0.2 and the factory image).
 export const STOCK_PTABLE_SHA256 = '7a1389f74052c466a758e2d93babc42a1a24738b81748cc3f46ce6606843330d';
 export const ESP32_S3_CHIP_ID = 9;
+export const APP_DESC_MAGIC = 0xabcd5432; // esp_app_desc_t magic at offset 32 of every app image (bootloaders and merged images lack it)
 
 // The makers' stock app image, used by "Go back to the stock firmware". Pinned by SHA-256, so a changed file is refused.
 export const STOCK_APP = {
   version: '1.0.2',
-  url: 'https://raw.githubusercontent.com/MartijndenHoed/Diptyx/main/firmware_release/diptyx_firmware_1.0.2_patch.bin',
+  url: 'https://raw.githubusercontent.com/MartijndenHoed/Diptyx/e7bbafd63a4a0da1c894ab2282051ee9dd4285b9/firmware_release/diptyx_firmware_1.0.2_patch.bin', // pinned to a commit
   sha256: '211749666378da5121fb21ecea99686af8a034ef138a82eb6cd7bde5e6386854',
 };
 
@@ -90,6 +91,9 @@ export async function validateAppImage(bytes) {
     for (let j = 0; j < size; j++) sum ^= bytes[pos + j];
     pos += size;
   }
+  if (bytes.length < 36 || dv.getUint32(32, true) !== APP_DESC_MAGIC) {
+    throw bad('This is not an app image (it has no application descriptor). A bootloader or a merged full-flash image would break the device if written to the app slot.');
+  }
   const checksumPos = pos + ((15 - (pos % 16)) % 16);
   if (checksumPos >= bytes.length) throw bad('The image is cut short (the checksum is missing).');
   if (bytes[checksumPos] !== sum) throw bad('The image checksum does not match; the file is damaged.');
@@ -98,6 +102,11 @@ export async function validateAppImage(bytes) {
     if (end + 32 > bytes.length) throw bad('The image is cut short (the digest is missing).');
     const want = hex(bytes.subarray(end, end + 32));
     if ((await sha256Hex(bytes.subarray(0, end))) !== want) throw bad('The image digest does not match; the file is damaged.');
+  }
+  // Nothing but erased flash may follow the image (a merged image carries more data behind the first app).
+  const end = checksumPos + 1 + (hashAppended ? 32 : 0);
+  for (let i = end; i < bytes.length; i++) {
+    if (bytes[i] !== 0xff) throw bad('There is extra data after the end of the app image (is this a merged full-flash image?).');
   }
   return { size: bytes.length, segments: segCount, entry: dv.getUint32(4, true) };
 }
@@ -114,7 +123,7 @@ export function parseManifest(m) {
   if (!fw || typeof fw.path !== 'string' || !/^[0-9a-f]{64}$/.test(fw.sha256 || '') || !Number.isInteger(fw.size)) {
     return { version: String(m.version || 'dev'), name: m.name || '', firmware: null };
   }
-  if (/^[a-z]+:|^\/\//i.test(fw.path) || fw.path.includes('..')) throw new FlasherError('bad-manifest', 'The firmware path in the list is not allowed.');
+  if (/^[a-z][a-z0-9+.-]*:|^[\/\\]|[\\\u0000-\u001f]/i.test(fw.path) || fw.path.includes('..')) throw new FlasherError('bad-manifest', 'The firmware path in the list is not allowed.');
   return { version: String(m.version || ''), name: m.name || '', released: m.released || '', firmware: { path: fw.path, size: fw.size, sha256: fw.sha256 } };
 }
 

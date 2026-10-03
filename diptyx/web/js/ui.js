@@ -208,9 +208,11 @@ function init() {
   });
   window.addEventListener('beforeunload', (e) => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
   if (supported) {
-    navigator.serial.addEventListener('disconnect', () => {
+    navigator.serial.addEventListener('disconnect', (ev) => {
+      // Ignore other serial devices being unplugged.
+      if (!driver || (ev.target && driver.port && ev.target !== driver.port)) return;
       if (busy) { log('The USB device was disconnected.'); }
-      else if (driver) { closeDriver(); setChecks([['fail', 'The Diptyx was unplugged.']]); }
+      else { closeDriver(); setChecks([['fail', 'The Diptyx was unplugged.']]); }
     });
   }
   loadManifest();

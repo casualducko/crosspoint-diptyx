@@ -58,17 +58,45 @@ test('a write error surfaces unchanged', async () => {
   await assert.rejects(installApp(d, await makeImage(), { stockSha: pt.sha }), /disconnected/);
 });
 
-test('backup reads the 6 MB app slot and never writes', async () => {
+test('backup refuses a non-stock table, reads the app slot, verifies it, and never writes', async () => {
+  const pt = await stockPtable();
+  const refused = fakeDriver({ ptable: pt.bytes });
+  const err = await backupApp(refused, {}).catch((e) => e);
+  assert.equal(err.code, 'not-stock-layout', 'the real stock hash does not match the test table, so it refuses');
+  const d = fakeDriver({ ptable: pt.bytes });
+  const img = await makeImage();
+  await installApp(d, img, { stockSha: pt.sha });
+  const data = await backupApp(d, { stockSha: pt.sha });
+  assert.equal(data.length, 0x600000);
+  assert.deepEqual(data.slice(0, img.length), img);
+  assert.equal(writes(d).length, 1, 'only the earlier install wrote');
+  // a read that disagrees with the chip's own MD5 is not handed back as a backup
+  const flaky = fakeDriver({ ptable: pt.bytes });
+  const realRead = flaky.read.bind(flaky);
+  flaky.read = async (a, l, p) => { const r = await realRead(a, l, p); if (a === 0x10000) r[7] ^= 1; return r; };
+  await assert.rejects(backupApp(flaky, { stockSha: pt.sha }), (e) => e.code === 'verify-failed');
+});
+
+test('an image whose length is not a multiple of 4 verifies (0xFF padding like esptool-js)', async () => {
   const pt = await stockPtable();
   const d = fakeDriver({ ptable: pt.bytes });
-  const data = await backupApp(d, { stockSha: undefined, onStep() {} }).catch((e) => e);
-  assert.equal(data.code, 'not-stock-layout', 'the real stock hash does not match the test table, so it refuses');
-  assert.equal(writes(d).length, 0);
+  const base = await makeImage({ hash: false });
+  const odd = new Uint8Array(base.length + 3).fill(0xff); odd.set(base); // erased-flash tail, 3 bytes over a 4 multiple
+  assert.notEqual(odd.length % 4, 0);
+  await installApp(d, odd, { stockSha: pt.sha });
+  assert.ok(d.calls.includes('reset'));
 });
 
 const respond = (body, ok = true, status = 200) => async () => ({
   ok, status, headers: { get: () => String(body.length) },
   body: { getReader() { let sent = false; return { async read() { if (sent) return { done: true }; sent = true; return { done: false, value: body }; } }; } },
+});
+
+test('fetchVerified refuses oversize files and gives up on a stalled download', async () => {
+  const big = new Uint8Array(1000);
+  await assert.rejects(fetchVerified('x', { maxBytes: 500, fetchImpl: respond(big) }), (e) => e.code === 'download-failed' && /larger/.test(e.message));
+  const stalled = (_url, { signal }) => new Promise((_res, rej) => signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+  await assert.rejects(fetchVerified('x', { fetchImpl: stalled, timeoutMs: 40 }), (e) => e.code === 'download-failed' && /too long/.test(e.message));
 });
 
 test('fetchVerified accepts a matching checksum and rejects a mismatch', async () => {

@@ -11,7 +11,7 @@ the bootloader (0x0), the partition table (0x8000), your settings (NVS) or the b
 it refuses to run if the device's partition table is not the stock Diptyx one. Going back to the stock firmware
 is the same command with the stock app image (see README.md).
 
-Needs Python 3.10+ (esptool 5 requires it) and esptool 5:  python -m pip install --upgrade "esptool>=5"
+Needs Python 3.10+ (esptool 5 requires it) and esptool 5:  python -m pip install --upgrade "esptool>=5,<6"
 """
 import argparse
 import datetime
@@ -77,9 +77,10 @@ def require_esptool():
         import esptool  # noqa: F401
         version = getattr(esptool, "__version__", "0")
     except ImportError:
-        die('esptool is not installed. Run:  python -m pip install --upgrade "esptool>=5"')
-    if int(version.split(".")[0]) < 5:
-        die(f'esptool {version} is too old. Run:  python -m pip install --upgrade "esptool>=5"')
+        die('esptool is not installed. Run:  python -m pip install --upgrade "esptool>=5,<6"')
+    major = int(version.split(".")[0])
+    if major < 5 or major >= 6:  # this script relies on the v5 command line (hyphenated commands, --after no-reset)
+        die(f'esptool {version} is not supported (need 5.x). Run:  python -m pip install --upgrade "esptool>=5,<6"')
 
 
 def find_port(wanted):
@@ -124,6 +125,30 @@ def check_app_image(path):
         magic = int.from_bytes(f.read(4), "little")
     if magic != 0xABCD5432:  # esp_app_desc_t: present in every ESP-IDF/Arduino application image, not in a bootloader
         die(f"{path} does not look like an application image (no app descriptor). Is it a bootloader or partition image?")
+    with open(path, "rb") as f:
+        data = f.read()
+    seg_count = data[1]
+    pos, xor = 24, 0xEF
+    for _ in range(seg_count):
+        if pos + 8 > len(data):
+            die(f"{path} is cut short (a segment header is missing); the file is damaged.")
+        seg_size = int.from_bytes(data[pos + 4:pos + 8], "little")
+        pos += 8
+        if pos + seg_size > len(data):
+            die(f"{path} is cut short (a segment runs past the end of the file); the file is damaged.")
+        for b in data[pos:pos + seg_size]:
+            xor ^= b
+        pos += seg_size
+    checksum_pos = pos + ((15 - (pos % 16)) % 16)
+    if checksum_pos >= len(data) or data[checksum_pos] != xor:
+        die(f"{path} fails its checksum; the file is damaged.")
+    end = checksum_pos + 1
+    if data[23] == 1:  # SHA-256 digest appended after the checksum byte
+        if end + 32 > len(data) or hashlib.sha256(data[:end]).digest() != data[end:end + 32]:
+            die(f"{path} fails its SHA-256 digest; the file is damaged.")
+        end += 32
+    if any(b != 0xFF for b in data[end:]):
+        die(f"{path} has extra data after the end of the app image. Is it a merged/full-flash image? Use the *-app.bin file.")
     return size
 
 
@@ -250,32 +275,40 @@ def cmd_check(args):
 def cmd_backup(args):
     port = find_port(args.port)
     ok, mac = preflight(port)
-    do_backup(port, mac, args.out)
-    leave_bootloader(port)
+    try:
+        do_backup(port, mac, args.out)
+    finally:
+        leave_bootloader(port)
     return 0
 
 
 def cmd_flash(args):
     with tempfile.TemporaryDirectory() as tmp:
         firmware = args.firmware or fetch_latest(tmp)
+        if not os.path.isfile(firmware):
+            die(f"Firmware file not found: {firmware}")
         size = check_app_image(firmware)
         print(f"Firmware: {firmware} ({size:,} bytes, sha256 {sha256_file(firmware)[:16]}...)")
         port = find_port(args.port)
         ok, mac = preflight(port)
-        if not ok and not args.force_layout:
-            die("The device's partition table is not the stock Diptyx layout, so 0x10000 may not be the app slot.\n"
-                "Nothing was written. If you are sure, re-run with --force-layout (at your own risk).")
-        if not ok:
-            print("WARNING: continuing with a different partition table because of --force-layout.")
-        if args.backup or (not args.no_backup and ask("Back up your current flash first? (recommended, ~3 min)", True, args.yes or None)):
-            do_backup(port, mac)
-        print(f"\nAbout to write the app image to {hex(APP_OFFSET)} only. Bootloader, partition table and your data stay as they are.")
-        if not ask("Flash now?", True, args.yes or None):
-            print("Cancelled; nothing was written.")
-            return 1
-        rc, _ = esptool("--chip", "esp32s3", "--port", port, "write-flash", hex(APP_OFFSET), firmware)
-        if rc != 0:
-            die("Flashing failed. The device is still recoverable: put it in download mode and run this again.")
+        written = False
+        try:
+            if not ok:
+                die("The device's partition table is not the stock Diptyx layout, so 0x10000 may not be the app slot.\n"
+                    "Nothing was written.")
+            if args.backup or (not args.no_backup and ask("Back up your current flash first? (recommended, ~3 min)", True, args.yes or None)):
+                do_backup(port, mac)
+            print(f"\nAbout to write the app image to {hex(APP_OFFSET)} only. Bootloader, partition table and your data stay as they are.")
+            if not ask("Flash now?", True, args.yes or None):
+                print("Cancelled; nothing was written.")
+                return 1
+            written = True  # the write below resets the chip itself (default reset)
+            rc, _ = esptool("--chip", "esp32s3", "--port", port, "write-flash", hex(APP_OFFSET), firmware)
+            if rc != 0:
+                die("Flashing failed. The device is still recoverable: put it in download mode and run this again.")
+        finally:
+            if not written:
+                leave_bootloader(port)  # the read-only steps left the chip in download mode
     print("\nDone. Unplug the USB cable, then plug it in again WITHOUT touching the center button.\n"
           "If the device stays in download mode, switch it fully off for ~20 seconds and try again.")
     return 0
@@ -294,7 +327,6 @@ def main():
             p.add_argument("--yes", action="store_true", help="do not ask questions (backs up first unless --no-backup)")
             p.add_argument("--backup", action="store_true", help="always back up first")
             p.add_argument("--no-backup", action="store_true", help="skip the backup question")
-            p.add_argument("--force-layout", action="store_true", help="flash even if the partition table is not the stock one (dangerous)")
     args = ap.parse_args()
     if args.cmd is None:
         args = ap.parse_args(["flash"])

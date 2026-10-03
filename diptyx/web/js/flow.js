@@ -41,8 +41,9 @@ export async function installApp(driver, bytes, { onStep = noop, onProgress = no
   onStep('verify-file', 'Checking the firmware file');
   const img = await validateAppImage(bytes);
   log(`Image OK: ${img.size.toLocaleString()} bytes, ${img.segments} segments`);
-  const padded = new Uint8Array(Math.ceil(bytes.length / 4) * 4);
-  padded.set(bytes); // the loader pads to 4 bytes with zeros... compare what is on the flash, so do the same
+  // The loader pads the image to a multiple of 4 with 0xFF before writing; compare what is on the flash, so do the same.
+  const padded = new Uint8Array(Math.ceil(bytes.length / 4) * 4).fill(0xff);
+  padded.set(bytes);
   onStep('write', 'Writing the firmware (do not unplug)');
   await driver.write(APP_OFFSET, bytes, onProgress);
   onStep('verify-write', 'Verifying what was written');
@@ -58,10 +59,26 @@ export async function installApp(driver, bytes, { onStep = noop, onProgress = no
 }
 
 // Downloads `url` with progress and returns the bytes. If `sha256` is given, the download must match it.
-export async function fetchVerified(url, { sha256, expectedSize, onProgress = noop, fetchImpl = globalThis.fetch, signal } = {}) {
+export async function fetchVerified(url, { sha256, expectedSize, onProgress = noop, fetchImpl = globalThis.fetch, signal, maxBytes = APP_SLOT_SIZE, timeoutMs = 180000 } = {}) {
+  // A stalled connection must not leave the page busy forever: abort after timeoutMs (and if the caller aborts).
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  if (signal) signal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  try {
+    return await fetchBytes(url, { sha256, expectedSize, onProgress, fetchImpl, signal: ctrl.signal, maxBytes });
+  } catch (e) {
+    if (ctrl.signal.aborted && !(e instanceof FlasherError)) throw new FlasherError('download-failed', 'The download took too long and was stopped.', 'Check your internet connection and try again.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchBytes(url, { sha256, expectedSize, onProgress, fetchImpl, signal, maxBytes }) {
   const res = await fetchImpl(url, { cache: 'no-store', signal });
   if (!res.ok) throw new FlasherError('download-failed', `The firmware could not be downloaded (HTTP ${res.status}).`, 'Check your internet connection and try again.');
   const total = Number(res.headers.get('content-length')) || expectedSize || 0;
+  if (total > maxBytes) throw new FlasherError('download-failed', 'The file is larger than the 6 MB app slot, so it was not used.', 'Try again, or use the flash script.');
   let bytes;
   if (res.body && res.body.getReader) {
     const reader = res.body.getReader();
@@ -72,6 +89,7 @@ export async function fetchVerified(url, { sha256, expectedSize, onProgress = no
       if (done) break;
       parts.push(value);
       got += value.length;
+      if (got > maxBytes) throw new FlasherError('download-failed', 'The file is larger than the 6 MB app slot, so it was not used.', 'Try again, or use the flash script.');
       if (total) onProgress(Math.min(1, got / total));
     }
     bytes = new Uint8Array(got);
@@ -101,10 +119,15 @@ export function restoreStock(driver, hooks = {}) {
 }
 
 // Reads the whole app slot (6 MB) so the user can keep a copy of what they had. Read-only.
-export async function backupApp(driver, { onStep = noop, onProgress = noop, log = noop } = {}) {
+export async function backupApp(driver, { onStep = noop, onProgress = noop, log = noop, stockSha } = {}) {
   onStep('check', 'Checking your Diptyx');
-  await checkDevice(driver, { log });
+  await checkDevice(driver, { log, stockSha });
   onStep('read', 'Reading your current firmware (about 3 minutes)');
   const data = await driver.read(APP_OFFSET, APP_SLOT_SIZE, onProgress);
+  // The copy is only worth keeping if it is what the chip holds: compare with the loader's MD5 of the same range.
+  const got = String(await driver.md5(APP_OFFSET, APP_SLOT_SIZE)).toLowerCase();
+  if (got !== md5Hex(data)) {
+    throw new FlasherError('verify-failed', 'The copy that was read does not match the flash, so it was not saved.', 'Try again with another USB cable or port.');
+  }
   return data;
 }

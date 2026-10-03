@@ -15,7 +15,9 @@ export async function makeImage({ chipId = 9, segments = [[0x3c000020, 100], [0x
     const seg = new Uint8Array(8 + size);
     new DataView(seg.buffer).setUint32(0, addr, true);
     new DataView(seg.buffer).setUint32(4, size, true);
-    for (let j = 0; j < size; j++) { seg[8 + j] = (i * 31 + j * 7 + 1) & 0xff; sum ^= seg[8 + j]; }
+    for (let j = 0; j < size; j++) { seg[8 + j] = (i * 31 + j * 7 + 1) & 0xff; }
+    if (i === 0 && size >= 4) new DataView(seg.buffer).setUint32(8, 0xabcd5432, true); // esp_app_desc_t magic, at offset 32 of the image
+    for (let j = 0; j < size; j++) sum ^= seg[8 + j];
     parts.push(seg); len += seg.length;
   });
   const padLen = (15 - (len % 16)) % 16;
@@ -46,7 +48,7 @@ export function fakeDriver({ chip = 'ESP32-S3 (QFN56) (revision v0.2)', flash = 
     async write(addr, bytes, onProgress) {
       calls.push(['write', addr, bytes.length]);
       if (failWrite) throw new Error('device disconnected');
-      const padded = new Uint8Array(Math.ceil(bytes.length / 4) * 4); padded.set(bytes);
+      const padded = new Uint8Array(Math.ceil(bytes.length / 4) * 4).fill(0xff); padded.set(bytes); // like esptool-js's padTo
       mem.set(padded, addr);
       if (failVerify) mem[addr + 5] ^= 0xff;
       onProgress && onProgress(1);
