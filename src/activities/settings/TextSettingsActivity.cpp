@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iterator>
 #include <string>
+#include <strings.h>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -89,9 +90,18 @@ void TextSettingsActivity::onEnter() {
     }
   }
 
+  std::stable_sort(fonts_.begin(), fonts_.end(), [](const FontEntry& a, const FontEntry& b) {
+    return strcasecmp(a.name.c_str(), b.name.c_str()) < 0;
+  });
+
   rebuildSizeList();
 
-  currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
+  // findCurrentFontIndex() yields a settingIndex; the list is alphabetical, so look up its row.
+  const int currentSettingIndex = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
+  currentFamilyIndex_ = 0;
+  for (int i = 0; i < static_cast<int>(fonts_.size()); i++) {
+    if (fonts_[i].settingIndex == currentSettingIndex) currentFamilyIndex_ = i;
+  }
   // Per-tab ring positions (0 = tab bar, 1..N = row). The base reset each
   // tab's nav with followOnBuild armed, so each tab's first build shows its
   // remembered selection (Family/Size open on the current item).
