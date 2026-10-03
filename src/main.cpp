@@ -82,12 +82,12 @@ EpdFont notoserif14BoldItalicFont(&notoserif_14_bolditalic);
 EpdFontFamily notoserif14FontFamily(&notoserif14RegularFont, &notoserif14BoldFont, &notoserif14ItalicFont,
                                     &notoserif14BoldItalicFont);
 #ifndef OMIT_FONTS
-EpdFont notoserif10RegularFont(&notoserif_10_regular);
-EpdFont notoserif10BoldFont(&notoserif_10_bold);
-EpdFont notoserif10ItalicFont(&notoserif_10_italic);
-EpdFont notoserif10BoldItalicFont(&notoserif_10_bolditalic);
-EpdFontFamily notoserif10FontFamily(&notoserif10RegularFont, &notoserif10BoldFont, &notoserif10ItalicFont,
-                                    &notoserif10BoldItalicFont);
+EpdFont literataMono10RegularFont(&literatamono_10_regular);
+EpdFont literataMono10BoldFont(&literatamono_10_bold);
+EpdFont literataMono10ItalicFont(&literatamono_10_italic);
+EpdFont literataMono10BoldItalicFont(&literatamono_10_bolditalic);
+EpdFontFamily literataMono10FontFamily(&literataMono10RegularFont, &literataMono10BoldFont, &literataMono10ItalicFont,
+                                       &literataMono10BoldItalicFont);
 EpdFont notoserif12RegularFont(&notoserif_12_regular);
 EpdFont notoserif12BoldFont(&notoserif_12_bold);
 EpdFont notoserif12ItalicFont(&notoserif_12_italic);
@@ -418,7 +418,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(NOTOSERIF_14_FONT_ID, notoserif14FontFamily);
 #ifndef OMIT_FONTS
-  renderer.insertFont(NOTOSERIF_10_FONT_ID, notoserif10FontFamily);
+  renderer.insertFont(LITERATAMONO_10_FONT_ID, literataMono10FontFamily);
   renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
   renderer.insertFont(NOTOSERIF_16_FONT_ID, notoserif16FontFamily);
   renderer.insertFont(NOTOSERIF_18_FONT_ID, notoserif18FontFamily);
@@ -593,6 +593,12 @@ void setup() {
   // user's saved choice (either style) still wins.
   if (gpio.hasTouch()) {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
+  }
+  // Diptyx stock reading font: Literata Mono, built in, 10 pt. Seeded before the load, like the reader menu style below
+  // it, so a saved choice still wins and only a fresh install gets it.
+  if (BoardConfig::isDiptyx()) {
+    SETTINGS.fontFamily = CrossPointSettings::LITERATAMONO;
+    SETTINGS.fontPointSize = 10;
   }
   SETTINGS.loadFromFile();
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy

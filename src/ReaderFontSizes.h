@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BoardConfig.h>
 #include <SdCardFontRegistry.h>
 
 #include <cstddef>
@@ -17,18 +16,18 @@
 // point sizes (see the global font objects in main.cpp).
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
 
-// Noto Serif also ships a 10 pt face (the Diptyx panels are ~138 ppi, so 12 pt looks large).
-inline constexpr uint8_t BUILTIN_SERIF_READER_POINT_SIZES[] = {10, 12, 14, 16, 18};
-
 struct PointSizeSet {
   const uint8_t* sizes;
   size_t count;
 };
 
-// The sizes the active built-in family ships: Noto Serif or (sans == true) Noto Sans.
-inline PointSizeSet builtinReaderPointSizes(const bool sans) {
-  return (sans || !BoardConfig::isDiptyx()) ? PointSizeSet{BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES)}
-              : PointSizeSet{BUILTIN_SERIF_READER_POINT_SIZES, std::size(BUILTIN_SERIF_READER_POINT_SIZES)};
+// Literata Mono is built in at 10 pt only.
+inline constexpr uint8_t BUILTIN_LITERATA_POINT_SIZES[] = {10};
+
+// The sizes the active built-in family ships: Noto Serif or Noto Sans (the upstream set), or Literata Mono (10 pt only).
+inline PointSizeSet builtinReaderPointSizes(const bool literata) {
+  return literata ? PointSizeSet{BUILTIN_LITERATA_POINT_SIZES, std::size(BUILTIN_LITERATA_POINT_SIZES)}
+                  : PointSizeSet{BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES)};
 }
 
 // Vector (.ttf/.otf) fonts offer every whole point size from 8 through 22.

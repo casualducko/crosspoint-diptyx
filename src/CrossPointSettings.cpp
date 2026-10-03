@@ -94,6 +94,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
   doc["fontFamily"] = fontFamily;
+  doc["fontFamilyScheme"] = 2;  // 2: value 2 is Literata Mono (before: OpenDyslexic)
   doc["fontSize"] = fontPointSize;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
@@ -247,7 +248,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
-  if (storedFontFamily == LEGACY_OPENDYSLEXIC && sdFontFamilyName[0] == '\0') {
+  if (storedFontFamily == LEGACY_OPENDYSLEXIC && doc["fontFamilyScheme"].isNull() && sdFontFamilyName[0] == '\0') {
     fontFamily = NOTOSERIF;
     strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
     sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
@@ -398,7 +399,7 @@ int CrossPointSettings::getRefreshFrequency() const {
 
 void CrossPointSettings::clearSdFontFamily() {
   sdFontFamilyName[0] = '\0';
-  const PointSizeSet builtin = builtinReaderPointSizes(fontFamily == NOTOSANS);
+  const PointSizeSet builtin = builtinReaderPointSizes(fontFamily == LITERATAMONO);
   fontPointSize = snapToNearestPointSize(builtin.sizes, builtin.count, fontPointSize);
   saveToFile();
 }
@@ -415,12 +416,11 @@ int CrossPointSettings::getReaderFontId() const {
   // carried over from an SD family may not be one of them. ensureLoaded()
   // normally persists the snap; snap again here (without allocating — this runs
   // in the page render loop) so rendering is correct even before it has run.
+  if (fontFamily == LITERATAMONO) return LITERATAMONO_10_FONT_ID;  // the only size this family ships
   const bool sans = (fontFamily == NOTOSANS);
-  const PointSizeSet builtin = builtinReaderPointSizes(sans);
+  const PointSizeSet builtin = builtinReaderPointSizes(false);
   const uint8_t pt = snapToNearestPointSize(builtin.sizes, builtin.count, fontPointSize);
   switch (pt) {
-    case 10:
-      return NOTOSERIF_10_FONT_ID;  // Noto Sans has no 10 pt; its size list never offers it
     case 12:
       return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
     case 16:

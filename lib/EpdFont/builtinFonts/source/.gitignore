@@ -4,6 +4,8 @@
 !.gitignore
 !NotoSerif/
 !NotoSerif/**
+!Literata/
+!Literata/**
 !NotoSans/
 !NotoSans/**
 !NotoSansArabic/

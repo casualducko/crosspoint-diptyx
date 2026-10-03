@@ -145,7 +145,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     }
     // Back on a built-in family, which exists only at BUILTIN_READER_POINT_SIZES:
     // a size inherited from an SD family has to come back into that set.
-    const PointSizeSet builtin = builtinReaderPointSizes(SETTINGS.fontFamily == CrossPointSettings::NOTOSANS);
+    const PointSizeSet builtin = builtinReaderPointSizes(SETTINGS.fontFamily == CrossPointSettings::LITERATAMONO);
     snapFontPointSizeTo(snapToNearestPointSize(builtin.sizes, builtin.count, SETTINGS.fontPointSize));
     return;
   }

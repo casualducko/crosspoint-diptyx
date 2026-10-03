@@ -23,6 +23,7 @@ parser.add_argument("--additional-intervals", dest="additional_intervals", actio
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--mono", dest="mono", action="store_true", help="Render monochrome-hinted glyphs at a whole-pixel size with whole-pixel advances (for black-and-white panels); the 2-bit output then holds only 0 and 3.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
@@ -38,6 +39,8 @@ font_name = args.name
 load_flags = freetype.FT_LOAD_RENDER
 if args.force_autohint:
     load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+if args.mono:
+    load_flags |= freetype.FT_LOAD_TARGET_MONO
 
 # inclusive unicode code point intervals
 # must not overlap and be in ascending order
@@ -290,7 +293,11 @@ for i_start, i_end in unvalidated_intervals:
         intervals.append((start, i_end))
 
 for face in font_stack:
-    face.set_char_size(size << 6, size << 6, 150, 150)
+    if args.mono:
+        # A whole-pixel em size so the hinter fits stems to the pixel grid exactly.
+        face.set_pixel_sizes(0, int(round(size * 150.0 / 72.0)))
+    else:
+        face.set_char_size(size << 6, size << 6, 150, 150)
 
 total_size = 0
 all_glyphs = []
@@ -303,7 +310,13 @@ for i_start, i_end in intervals:
         # Build out 4-bit greyscale bitmap
         pixels4g = []
         px = 0
-        for i, v in enumerate(bitmap.buffer):
+        if bitmap.pixel_mode == freetype.FT_PIXEL_MODE_MONO:
+            # Monochrome glyphs come packed 1 bit per pixel; expand them to 0 / 255 like an 8-bit bitmap.
+            glyph_values = [255 if (bitmap.buffer[r * bitmap.pitch + (c >> 3)] >> (7 - (c & 7))) & 1 else 0
+                            for r in range(bitmap.rows) for c in range(bitmap.width)]
+        else:
+            glyph_values = bitmap.buffer
+        for i, v in enumerate(glyph_values):
             y = i / bitmap.width
             x = i % bitmap.width
             if x % 2 == 0:
@@ -369,7 +382,8 @@ for i_start, i_end in intervals:
             height = bitmap.rows,
             # We use linearHoriAdvance (16.16 fixed-point, unhinted) instead of
             # advance.x (26.6 fixed-point, grid-fitted to whole pixels by hinter)
-            advance_x = fp4_from_ft16_16(face.glyph.linearHoriAdvance),
+            advance_x = (fp4_from_ft16_16(((face.glyph.advance.x + 32) >> 6) << 16) if args.mono
+                         else fp4_from_ft16_16(face.glyph.linearHoriAdvance)),
             left = face.glyph.bitmap_left,
             top = face.glyph.bitmap_top,
             data_length = len(packed),
@@ -526,7 +540,7 @@ def extract_kerning_fonttools(font_path, codepoints, ppem, pnum_subs=None):
 # The ppem used by the existing glyph rasterization:
 #   face.set_char_size(size << 6, size << 6, 150, 150)
 # means size_pt at 150 DPI -> ppem = size * 150 / 72
-ppem = size * 150.0 / 72.0
+ppem = float(round(size * 150.0 / 72.0)) if args.mono else size * 150.0 / 72.0
 
 kern_map = {}  # (leftCp, rightCp) -> adjust
 for face_idx, cps in face_idx_cps.items():

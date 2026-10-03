@@ -14,7 +14,7 @@ std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, co
       if (!sizes.empty()) return sizes;
     }
   }
-  const PointSizeSet builtin = builtinReaderPointSizes(SETTINGS.fontFamily == CrossPointSettings::NOTOSANS);
+  const PointSizeSet builtin = builtinReaderPointSizes(SETTINGS.fontFamily == CrossPointSettings::LITERATAMONO);
   return {builtin.sizes, builtin.sizes + builtin.count};
 }
 
