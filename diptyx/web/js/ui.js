@@ -135,7 +135,7 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 }
 
 const AFTER = [
-  'Unplug the USB cable, then plug it in again without touching the joystick.',
+  'Unplug the USB cable, then plug it in again without touching the centre button.',
   'The Diptyx starts normally. If the screens stay blank for more than a minute, unplug it, switch off for 20 seconds and plug it in again.',
 ];
 

@@ -37,7 +37,7 @@ ESPRESSIF_VID = 0x303A
 DOWNLOAD_MODE_HELP = """
 Could not talk to the device. Put the Diptyx in download mode:
   1. Unplug the USB cable and switch the device completely off (hold the power button, wait ~20 seconds).
-  2. HOLD the centre joystick pressed in.
+  2. HOLD the centre button pressed in.
   3. While holding it, plug in the USB-C cable. Keep holding for ~3 seconds, then let go.
   4. Run this command again.
 Also try a different cable (it must carry data, not only power) and a different USB port.
@@ -276,7 +276,7 @@ def cmd_flash(args):
         rc, _ = esptool("--chip", "esp32s3", "--port", port, "write-flash", hex(APP_OFFSET), firmware)
         if rc != 0:
             die("Flashing failed. The device is still recoverable: put it in download mode and run this again.")
-    print("\nDone. Unplug the USB cable, then plug it in again WITHOUT touching the joystick.\n"
+    print("\nDone. Unplug the USB cable, then plug it in again WITHOUT touching the centre button.\n"
           "If the device stays in download mode, switch it fully off for ~20 seconds and try again.")
     return 0
 
