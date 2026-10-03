@@ -53,6 +53,15 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
+echo "#define NOTOSANS_10_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./notosans_10_regular.h",
+  "./notosans_10_bold.h",
+  "./notosans_10_bolditalic.h",
+  "./notosans_10_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
 echo "#define NOTOSANS_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
   "./notosans_12_regular.h",
@@ -115,6 +124,7 @@ FONT_ID_NAMES=(
   LITERATAMONO_14_FONT_ID
   LITERATAMONO_16_FONT_ID
   LITERATAMONO_18_FONT_ID
+  NOTOSANS_10_FONT_ID
   NOTOSANS_12_FONT_ID
   NOTOSANS_14_FONT_ID
   NOTOSANS_16_FONT_ID

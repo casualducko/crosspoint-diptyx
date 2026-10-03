@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
 LITERATA_FONT_SIZES=(10 12 14 16 18)
-NOTOSANS_FONT_SIZES=(12 14 16 18)
+NOTOSANS_FONT_SIZES=(10 12 14 16 18)
 
 # Literata, monochrome-hinted for the black-and-white Diptyx panels: the built-in serif family.
 for size in ${LITERATA_FONT_SIZES[@]}; do
@@ -19,12 +19,13 @@ for size in ${LITERATA_FONT_SIZES[@]}; do
   done
 done
 
+# Noto Sans, monochrome-hinted like Literata: the built-in sans family.
 for size in ${NOTOSANS_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli --mono > $output_path
     echo "Generated $output_path"
   done
 done

@@ -420,7 +420,7 @@ int CrossPointSettings::getReaderFontId() const {
   const uint8_t pt = snapToNearestPointSize(builtin.sizes, builtin.count, fontPointSize);
   switch (pt) {
     case 10:
-      return LITERATAMONO_10_FONT_ID;  // only the serif family ships 10 pt; Noto Sans never offers it
+      return sans ? NOTOSANS_10_FONT_ID : LITERATAMONO_10_FONT_ID;
     case 12:
       return sans ? NOTOSANS_12_FONT_ID : LITERATAMONO_12_FONT_ID;
     case 16:

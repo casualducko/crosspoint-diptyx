@@ -12,16 +12,16 @@
 // therefore come from whichever family is active: the built-in or vector set
 // below, or the .cpfont files a user installed for an SD family.
 
-// The built-in Noto Serif / Noto Sans families are compiled in at exactly these
-// point sizes (see the global font objects in main.cpp).
-inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
+// The built-in Noto Sans family is compiled in at exactly these point sizes
+// (see the global font objects in main.cpp).
+inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {10, 12, 14, 16, 18};
 
 struct PointSizeSet {
   const uint8_t* sizes;
   size_t count;
 };
 
-// The serif family (Literata Mono) also ships 10 pt; Noto Sans stays at upstream's sizes.
+// The serif family (Literata Mono) ships the same sizes as Noto Sans.
 inline constexpr uint8_t BUILTIN_SERIF_POINT_SIZES[] = {10, 12, 14, 16, 18};
 
 // The sizes the active built-in family ships.
