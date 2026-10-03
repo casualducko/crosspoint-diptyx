@@ -1,8 +1,9 @@
 # Diptyx font pack: SD-card reader fonts curated for the Diptyx panels (~138 ppi), built with
-# lib/EpdFont/scripts/build-sd-fonts.py (see diptyx/fonts/README.md). All three families are SIL OFL 1.1.
+# lib/EpdFont/scripts/build-sd-fonts.py (see diptyx/fonts/README.md). All four families are SIL OFL 1.1.
 scriptGroups:
   - {tag: latin, label: Latin}
   - {tag: cyrillic, label: Cyrillic}
+  - {tag: greek, label: Greek}
 
 families:
   - name: Bitter
@@ -26,6 +27,17 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/uxjulia/crossink-fonts/main/fonts/ChareInk7/ChareInk7-BoldItalic.ttf"}
+
+  - name: Literata
+    description: "Screen-optimized serif (Latin, Greek, Cyrillic)"
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
+    sizes: [10, 12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-BoldItalic.ttf"}
 
   - name: CrimsonPro
     description: "Elegant old-style serif (Latin)"
