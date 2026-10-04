@@ -32,7 +32,7 @@ and the rumble motor are unused; no grayscale (the panels are black and white); 
 
 Flashing needs the chip's built-in bootloader:
 
-1. **Unplug USB first**, then switch the device completely off: hold the power button for 3 seconds until the screen says power off, then let go. With the cable plugged in it never fully turns off. To check, press a page button: nothing should happen. (If it still reacts, repeat.)
+1. **Unplug USB first**, then switch the device completely off: hold the power button for 3 seconds until the screen says power off, then let go. With the cable plugged in it never fully turns off. The stock firmware can take several minutes to really power down after that (CrossPoint is immediate). To check, press a page button: no buzz means it is off.
 2. **Hold the center button pressed in.**
 3. While holding it, plug in the USB-C cable. Keep holding for about 3 seconds, then let go. The screens stay as they were; that is normal.
 
@@ -105,7 +105,7 @@ The stock firmware is published by the Diptyx makers in <https://github.com/Mart
 ./flash.sh flash --firmware diptyx_firmware_1.0.2_patch.bin          (Windows: flash.bat flash --firmware ...)
 ```
 
-Your stock settings are untouched by CrossPoint, so the stock firmware comes back as you left it. If you made a backup with
+Your stock settings are untouched by CrossPoint, so the stock firmware comes back as you left it. To turn the stock firmware on after it has been switched off completely, **tap** the power button briefly with the cable unplugged; if nothing happens, wait 20 seconds and tap again. Do not hold it: the stock firmware shuts itself down again if the button is held for 3 seconds at startup. If you made a backup with
 `flash.sh backup`, you can also restore it completely with esptool: `python -m esptool --chip esp32s3 write-flash 0x0 diptyx-flash-backup-....bin`.
 (Download mode as above; this rewrites everything, including the bootloader, so use your own backup only.)
 
