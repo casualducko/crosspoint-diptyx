@@ -135,8 +135,8 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 }
 
 const AFTER = [
-  'The Diptyx should start by itself within about 20 seconds. Keep your hands off the center button, or it goes back into download mode.',
-  'If the screens stay unchanged, press the left page button. A Diptyx powered over USB goes to sleep after a cold start, and that button wakes it. The power button does not.',
+  'Unplug the USB cable and wait about 15 seconds, then plug it in again without touching any button. The Diptyx starts and shows the CrossPoint home screen.',
+  'The restart from this page can leave the chip in download mode, so the unplug and replug is needed. If the screens still stay unchanged, press the left page button.',
 ];
 
 function onInstall() {

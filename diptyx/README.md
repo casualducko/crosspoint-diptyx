@@ -32,7 +32,7 @@ and the rumble motor are unused; no grayscale (the panels are black and white); 
 
 Flashing needs the chip's built-in bootloader:
 
-1. Unplug USB and switch the device completely off (hold the power button, wait about 20 seconds).
+1. **Unplug USB first**, then switch the device completely off: hold the power button for 3 seconds until the screen says power off, then let go. With the cable plugged in it never fully turns off. To check, press a page button: nothing should happen. (If it still reacts, repeat.)
 2. **Hold the center button pressed in.**
 3. While holding it, plug in the USB-C cable. Keep holding for about 3 seconds, then let go. The screens stay as they were; that is normal.
 
@@ -76,10 +76,9 @@ Other commands: `./flash.sh check` (inspect only, writes nothing), `./flash.sh b
 
 ## After flashing
 
-The Diptyx should start by itself within about 20 seconds; keep your hands off the center button, or it goes back into download mode. If the
-screens stay unchanged, **press the left page button**: a Diptyx powered over USB goes to sleep after a cold start, and that button wakes it (the
-power button does not). The left screen shows the CrossPoint home screen; the right screen fills in with the card for your current book after a
-few seconds.
+**Unplug the cable, wait about 15 seconds, and plug it in again without touching any button.** The restart right after flashing can leave the chip
+in download mode, and a real power-up starts CrossPoint. If the screens stay unchanged, press the left page button. The left screen shows the
+CrossPoint home screen; the right screen fills in with the card for your current book after a few seconds.
 
 The Diptyx has five controls: a left button, a center rocker that presses and moves up and down, and a right button (plus the
 power button).
@@ -120,7 +119,7 @@ Your stock settings are untouched by CrossPoint, so the stock firmware comes bac
 - **Windows:** no driver is needed on Windows 10/11. If *Device Manager* shows an unknown device, run Windows Update or install the
   Espressif USB JTAG/serial driver.
 - **macOS:** nothing to install. If it asks for permission to access removable devices, allow it.
-- **After flashing nothing happens:** press the left page button (see *After flashing*). If it is back in download mode, let go of the center button, unplug, wait 10 seconds and plug in again.
+- **After flashing nothing happens:** unplug the cable, wait 15 seconds and plug in again without touching any button (see *After flashing*); if the screens are still unchanged, press the left page button.
 - **Screen contrast looks washed out or too dark:** the display voltage (VCOM) is read from your unit's own settings left by the stock
   firmware (`vcomLeft` / `vcomRight`); if there are none (a unit that never ran the stock firmware) it uses the stock default, 23. The serial
   log shows the values used (`[DIPTYX] left panel VCOM ...`). Open an issue with your stock values if the picture still looks wrong.
