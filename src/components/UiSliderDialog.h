@@ -35,6 +35,7 @@ struct UiSliderDialogSpec {
   // Step hints for button boards (small step, large step); skipped on touch.
   const char* hintLine1 = nullptr;
   const char* hintLine2 = nullptr;
+  const char* hintLine3 = nullptr;  // optional third line (button boards): which key confirms
 };
 
 inline void buildSliderDialogScreen(UiAppHost::UiScreen& screen, freeink::ui::GfxRendererTarget& uiTarget,
@@ -54,7 +55,9 @@ inline void buildSliderDialogScreen(UiAppHost::UiScreen& screen, freeink::ui::Gf
   const int16_t bandHeight = touch ? 56 : 24;
   const int16_t capLh = screen.target().lineHeight(theme.smallText.font);
   const int16_t sliderH = static_cast<int16_t>(capLh + theme.spaceMd + bandHeight);
-  const int16_t hintsH = touch ? 0 : static_cast<int16_t>(capLh * 2 + theme.spaceSm + theme.spaceMd);
+  const int hintLines = spec.hintLine3 ? 3 : 2;
+  const int16_t hintsH =
+      touch ? 0 : static_cast<int16_t>(capLh * hintLines + theme.spaceSm * (hintLines - 1) + theme.spaceMd);
 
   // Dialog chrome and slots, styled exactly like OptionPopup: bordered popup
   // panel per theme frame metrics, body-font caption, [-] [+] [Confirm] as
@@ -133,6 +136,11 @@ inline void buildSliderDialogScreen(UiAppHost::UiScreen& screen, freeink::ui::Gf
     if (spec.hintLine2) {
       screen.target().text(fui::Rect{band.x, static_cast<int16_t>(hintY + capLh + theme.spaceSm), band.width, capLh},
                            spec.hintLine2, hint);
+    }
+    if (spec.hintLine3) {
+      screen.target().text(
+          fui::Rect{band.x, static_cast<int16_t>(hintY + (capLh + theme.spaceSm) * 2), band.width, capLh},
+          spec.hintLine3, hint);
     }
   }
 
