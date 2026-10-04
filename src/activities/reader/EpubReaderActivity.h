@@ -84,6 +84,7 @@ class EpubReaderActivity final : public ReaderActivity {
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
+  bool bookmarkPopupStored = false;  // overlayPageStored holds the frame under the bookmark popup
   // True while a deferred overlay chrome refresh (pushOverlayRefresh) may still
   // be running on the panel. settleOverlayRefresh() must run before the
   // framebuffer is touched or another differential refresh is pushed.
@@ -174,7 +175,11 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
-  void addBookmark();
+  void addBookmark(bool deferRender = false);  // deferRender: the caller refreshes the screen itself
+  // Diptyx: a bookmark toggle changes neither page, so the confirmation is drawn over the current frame and taken away
+  // by restoring that frame, not by re-rendering both panels (twice) with the page.
+  bool showBookmarkPopupOnly();
+  void dismissBookmarkPopup();
   void updateBookmarkFlag();
 
   void navigateToHref(const std::string& href, bool savePosition = false);

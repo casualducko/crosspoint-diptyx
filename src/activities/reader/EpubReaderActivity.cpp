@@ -406,6 +406,11 @@ void EpubReaderActivity::loop() {
 
   rememberBookOnceRendered();
 
+  if (bookmarkPopupStored &&
+      (gpio.wasAnyPressed() || millis() - bookmarkMessageTime >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS)) {
+    dismissBookmarkPopup();
+  }
+
   // Someone else turned the screen while this reader was stacked (the control
   // center's orientation tile). Reflow before the next render, or the page
   // would be drawn with a layout built for the previous frame size.
@@ -580,10 +585,10 @@ void EpubReaderActivity::loop() {
   if (confirmLongPressed) {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
-        addBookmark();
+        addBookmark(/*deferRender=*/BoardConfig::isDiptyx());
         showBookmarkMessage = true;
         bookmarkMessageTime = millis();
-        requestUpdate();
+        if (!showBookmarkPopupOnly()) requestUpdate();
         break;
       case CrossPointSettings::LP_MENU_KOSYNC:
         if (launchKOReaderSync()) {
@@ -604,10 +609,10 @@ void EpubReaderActivity::loop() {
     switch (mappedInput.homeButtonAction()) {
       case HomeButtonAction::Bookmark:
         if (!showBookmarkMessage) {
-          addBookmark();
+          addBookmark(/*deferRender=*/BoardConfig::isDiptyx());
           showBookmarkMessage = true;
           bookmarkMessageTime = millis();
-          requestUpdate();
+          if (!showBookmarkPopupOnly()) requestUpdate();
         }
         return;
       case HomeButtonAction::Sync:
@@ -2126,6 +2131,33 @@ void EpubReaderActivity::discardOverlayPage() {
   if (!overlayPageStored) return;
   renderer.discardStoredBwBuffer();
   overlayPageStored = false;
+  bookmarkPopupStored = false;
+}
+
+bool EpubReaderActivity::showBookmarkPopupOnly() {
+  if (!BoardConfig::isDiptyx() || !section || overlay != Overlay::None || overlayPageStored) return false;
+  RenderLock lock;
+  if (!renderer.storeBwBuffer()) return false;
+  overlayPageStored = true;
+  bookmarkPopupStored = true;
+  GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  showBookmarkMessage = true;
+  bookmarkMessageDrawn = true;
+  bookmarkMessageTime = millis();
+  return true;
+}
+
+void EpubReaderActivity::dismissBookmarkPopup() {
+  if (!bookmarkPopupStored) return;
+  RenderLock lock;
+  bookmarkPopupStored = false;
+  showBookmarkMessage = false;
+  bookmarkMessageDrawn = false;
+  overlayPageStored = false;
+  // The glass shows the popup, so the differential baseline keeps tracking what was pushed (see restoreBwBuffer()).
+  renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+  renderStatusBar();  // the bookmark icon may have changed
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
 // Push freshly painted overlay chrome. Where the panel supports it the refresh
@@ -2731,10 +2763,10 @@ void EpubReaderActivity::activateMoreRow(int row) {
   if (action == MA::TOGGLE_BOOKMARK) {
     // No child activity here to trigger the re-render the list menu relies on:
     // show the same confirmation popup the long-press path does.
-    addBookmark();
+    addBookmark(/*deferRender=*/BoardConfig::isDiptyx());
     showBookmarkMessage = true;
     bookmarkMessageTime = millis();
-    requestUpdate();
+    if (!showBookmarkPopupOnly()) requestUpdate();
     return;
   }
   onReaderMenuConfirm(action);
@@ -2862,7 +2894,7 @@ void EpubReaderActivity::loadCachedBookmarks() {
   updateBookmarkFlag();
 }
 
-void EpubReaderActivity::addBookmark() {
+void EpubReaderActivity::addBookmark(const bool deferRender) {
   if (!section || !epub) return;
   LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
   int currentPage;
@@ -2915,7 +2947,7 @@ void EpubReaderActivity::addBookmark() {
   if (!BookmarkFile::save(epub->getPath(), cachedBookmarks)) {
     LOG_ERR("ERS", "Failed to save bookmarks");
   }
-  requestUpdate();
+  if (!deferRender) requestUpdate();
 }
 
 void EpubReaderActivity::updateBookmarkFlag() {
