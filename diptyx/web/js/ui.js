@@ -139,7 +139,8 @@ const AFTER = [
 ];
 const AFTER_OWN = ['The Diptyx restarts by itself within about 20 seconds.'];
 const AFTER_STOCK = [
-  'The Diptyx restarts by itself into the stock firmware within about 20 seconds. Your settings and books are untouched. If you switch it off completely later, tap the power button briefly to start it (wait 20 seconds and tap again if it does not start; holding it for 3 seconds makes the stock firmware shut down).',
+  'The Diptyx restarts by itself into the stock firmware in a few seconds. Your settings and books are untouched.',
+  "Note: If your device gets stuck with POWER OFF written on the screen, make sure it's unplugged from power, wait 20 seconds, then press the power button again.",
 ];
 
 function onInstall() {
