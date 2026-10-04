@@ -32,12 +32,13 @@ and the rumble motor are unused; no grayscale (the panels are black and white); 
 
 Flashing needs the chip's built-in bootloader:
 
-1. **Unplug USB first**, then switch the device completely off: hold the power button for 3 seconds until the screen says power off, then let go. With the cable plugged in it never fully turns off. The stock firmware can take several minutes to really power down after that (CrossPoint is immediate). To check, press a page button: no buzz means it is off.
-2. **Hold the center button pressed in.**
-3. While holding it, plug in the USB-C cable. Keep holding for about 3 seconds, then let go. The screens stay as they were; that is normal.
+1. **Unplug USB first.** Hold the power button for 3 seconds until the screen says power off, then let go. With the cable plugged in, the Diptyx never fully turns off.
+2. **Wait until it is really off.** CrossPoint switches off at once, but the stock firmware can take several minutes. Press a page button: no buzz means it is off.
+3. **Press the center button straight in and keep holding it.**
+4. While holding it, plug in the USB-C cable, keep holding for about 5 seconds, then let go. The screens stay as they were; that is normal.
 
-It now shows up on your computer as an *Espressif / USB JTAG/serial debug unit*. To leave download mode, unplug the cable and plug it
-in again **without** touching the center button.
+It now shows up on your computer as an *Espressif / USB JTAG/serial debug unit*. If it is listed as *Diptyx E_reader* instead, it is running
+normally and not in download mode: start again. The flashers restart the device by themselves when they finish.
 
 ## Option A: the web flasher (easiest)
 
