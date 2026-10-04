@@ -2156,6 +2156,16 @@ void EpubReaderActivity::dismissBookmarkPopup() {
   overlayPageStored = false;
   // The glass shows the popup, so the differential baseline keeps tracking what was pushed (see restoreBwBuffer()).
   renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+  // The status bar draws on top of what is there, so a removed bookmark icon would stay in the restored frame: blank the
+  // bottom margin strip (below the page) first, then draw the bar again.
+  int marginTop = 0;
+  int marginRight = 0;
+  int marginBottom = 0;
+  int marginLeft = 0;
+  renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
+  const int stripHeight =
+      marginBottom + std::max<int>(SETTINGS.screenMargin, UITheme::getInstance().getStatusBarHeight());
+  renderer.fillRect(0, renderer.getScreenHeight() - stripHeight, renderer.getScreenWidth(), stripHeight, false);
   renderStatusBar();  // the bookmark icon may have changed
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
