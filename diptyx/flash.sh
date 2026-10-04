@@ -12,7 +12,7 @@ command -v "$PY" >/dev/null 2>&1 || { echo "Python 3 is required (https://www.py
   exit 1
 }
 VENV="$HERE/.flasher-venv"
-if [ ! -f "$VENV/.ready" ]; then
+if [ ! -f "$VENV/.ready" ] || ! "$VENV/bin/python" -c 'import esptool' >/dev/null 2>&1; then
   echo "Setting up a private environment (one time, needs internet)..."
   rm -rf "$VENV"
   "$PY" -m venv "$VENV" || { echo "Could not create a Python virtual environment (Debian/Ubuntu: sudo apt install python3-venv)."; rm -rf "$VENV"; exit 1; }

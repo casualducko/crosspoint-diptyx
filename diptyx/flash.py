@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,11 @@ PTABLE_OFFSET, PTABLE_LEN = 0x8000, 0xC00
 # SHA-256 of the 3 KB partition table at 0x8000 in the stock Diptyx firmware (1.0.1, 1.0.2 and the factory image).
 STOCK_PTABLE_SHA256 = "7a1389f74052c466a758e2d93babc42a1a24738b81748cc3f46ce6606843330d"
 ESPRESSIF_VID = 0x303A
+
+PERMISSION_HELP = """
+The serial port exists but this user may not open it (Linux): add yourself to the serial group, then log out and in
+(sudo usermod -aG dialout $USER on Debian/Ubuntu, uucp on Arch/Fedora), or install the udev rule 70-diptyx.rules.
+"""
 
 DOWNLOAD_MODE_HELP = """
 Could not talk to the device. Put the Diptyx in download mode:
@@ -158,6 +164,9 @@ def preflight(port):
     rc, out = esptool("--chip", "esp32s3", "--port", port, "flash-id", capture=True, stay=True)
     if rc != 0:
         print(out[-600:])
+        if "Permission denied" in out or "Errno 13" in out:
+            print(PERMISSION_HELP)
+            die("No permission to open the serial port.")
         print(DOWNLOAD_MODE_HELP)
         die("Could not connect to the device.")
     if "ESP32-S3" not in out:
@@ -218,7 +227,7 @@ def fetch_latest(tmp):
     try:
         download(assets[app], bin_path)
         download(assets[app + ".sha256"], sha_path)
-        with open(sha_path) as f:
+        with open(sha_path, encoding="utf-8-sig") as f:
             parts = f.read().split()
     except (urllib.error.URLError, OSError) as e:
         die(f"Download failed ({e}). Check your connection and try again.")
@@ -234,9 +243,16 @@ def fetch_latest(tmp):
 def do_backup(port, mac, out=None):
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     out = out or f"diptyx-flash-backup-{(mac or 'device').replace(':', '')}-{stamp}.bin"
+    if os.path.exists(out):
+        die(f"{out} already exists; choose another name so an earlier backup is not overwritten.")
+    free = shutil.disk_usage(os.path.dirname(os.path.abspath(out))).free
+    if free < FLASH_SIZE + 16 * 1024 * 1024:
+        die(f"Not enough free disk space for the 16 MB backup ({free // (1024 * 1024)} MB free).")
     print(f"Backing up the full 16 MB flash to {out} (about 2-3 minutes)...")
     rc, _ = esptool("--chip", "esp32s3", "--port", port, "read-flash", "0", hex(FLASH_SIZE), out, stay=True)
     if rc != 0:
+        if os.path.exists(out):
+            os.remove(out)  # a partial file must not pass for a backup
         die("Backup failed; nothing was changed on the device.")
     print(f"Backup saved: {out}\nKeep it private: it contains your device's settings.\nSHA-256 {sha256_file(out)}")
     return out
@@ -304,8 +320,12 @@ def cmd_flash(args):
                 return 1
             written = True  # the write below restarts the chip itself
             # watchdog-reset: a plain RTS reset can leave the chip in download mode after a center-button entry
-            rc, _ = esptool("--chip", "esp32s3", "--port", port, "--after", "watchdog-reset", "write-flash",
-                            hex(APP_OFFSET), firmware)
+            try:
+                rc, _ = esptool("--chip", "esp32s3", "--port", port, "--after", "watchdog-reset", "write-flash",
+                                hex(APP_OFFSET), firmware)
+            except KeyboardInterrupt:
+                die("Interrupted while writing. The app slot may be half written, but the device is still recoverable: "
+                    "put it in download mode and run this again.")
             if rc != 0:
                 die("Flashing failed. The device is still recoverable: put it in download mode and run this again.")
         finally:

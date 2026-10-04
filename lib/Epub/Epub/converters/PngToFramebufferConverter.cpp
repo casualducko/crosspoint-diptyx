@@ -295,6 +295,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
           }
           pw.writePixel(outX, ditheredGray, ctx->alphaLineBuffer != nullptr);
           if (caching) cw.writePixel(outX, ditheredGray);
+        } else if (caching) {
+          cw.writePixel(outX, 3);  // transparent: white in the cache, whose band starts black
         }
       }
 
