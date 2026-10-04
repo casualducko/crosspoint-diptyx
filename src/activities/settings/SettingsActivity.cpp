@@ -1,5 +1,6 @@
 #include "SettingsActivity.h"
 
+#include <BatteryMonitor.h>
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
@@ -605,8 +606,21 @@ void SettingsActivity::drawChrome() {
   // indicator; the rest of the screen renders through the app.
   // Version rides in the header's trailing label slot: the footer position
   // conflicts with button hints on non-touch devices.
+  // The Diptyx shows the battery voltage next to the version, so the measurement can be checked without a cable.
+  char trailing[40];
+  if (BoardConfig::isDiptyx()) {
+    static const BatteryMonitor battery;
+    const unsigned mv = battery.readMillivolts();
+    if (mv > 0) {
+      snprintf(trailing, sizeof(trailing), "%u.%02u V  %s", mv / 1000, (mv % 1000) / 10, CROSSPOINT_VERSION);
+    } else {
+      snprintf(trailing, sizeof(trailing), "-- V  %s", CROSSPOINT_VERSION);
+    }
+  } else {
+    snprintf(trailing, sizeof(trailing), "%s", CROSSPOINT_VERSION);
+  }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+                 trailing);
 }
 
 void SettingsActivity::drawFooter() {
