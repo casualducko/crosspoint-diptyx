@@ -309,9 +309,9 @@ def cmd_flash(args):
         finally:
             if not written:
                 leave_bootloader(port)  # the read-only steps left the chip in download mode
-    print("\nDone. Unplug the USB cable, wait about 15 seconds, then plug it in again without touching any button.\n"
-          "The restart after flashing can leave the chip in download mode; a real power-up starts CrossPoint.\n"
-          "If the screens still stay unchanged, press the LEFT PAGE button.")
+    print("\nDone. The Diptyx restarts by itself within about 20 seconds.\n"
+          "If the screens stay unchanged for a minute, unplug the USB cable, wait about 15 seconds and plug it in again\n"
+          "without touching any button (or press the LEFT PAGE button).")
     return 0
 
 

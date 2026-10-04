@@ -135,8 +135,7 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 }
 
 const AFTER = [
-  'Unplug the USB cable and wait about 15 seconds, then plug it in again without touching any button. The Diptyx starts and shows the CrossPoint home screen.',
-  'The restart from this page can leave the chip in download mode, so the unplug and replug is needed. If the screens still stay unchanged, press the left page button.',
+  'The Diptyx restarts by itself and shows the CrossPoint home screen within about 20 seconds.',
 ];
 
 function onInstall() {
