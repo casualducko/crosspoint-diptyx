@@ -30,16 +30,21 @@ constexpr char diptyxManifestUrl[] = "https://casualducko.github.io/crosspoint-d
 #define DIPTYX_RELEASE "dev"  // the release workflow sets this to the tag's version
 #endif
 
-// Parses "major.minor.patch-build"; false if the text does not have that shape.
+// Parses "major.minor.patch-build"; false if the text does not start with major.minor.patch. A suffix that is not a
+// build number ("-rc1") counts as build 0, so a pre-release is older than the release it precedes.
 bool parseDiptyxRelease(const char* text, int out[4]) {
-  return text && sscanf(text, "%d.%d.%d-%d", &out[0], &out[1], &out[2], &out[3]) == 4;
+  if (!text) return false;
+  out[3] = 0;
+  return sscanf(text, "%d.%d.%d-%d", &out[0], &out[1], &out[2], &out[3]) >= 3;
 }
 
 // Pulls the "version" string out of the manifest JSON (a flat object written by the release workflow).
 bool parseManifestVersion(const std::string& json, std::string& version) {
   const size_t key = json.find("\"version\"");
   if (key == std::string::npos) return false;
-  const size_t open = json.find('"', json.find(':', key) + 1);
+  const size_t colon = json.find(':', key);
+  if (colon == std::string::npos) return false;
+  const size_t open = json.find('"', colon + 1);
   if (open == std::string::npos) return false;
   const size_t close = json.find('"', open + 1);
   if (close == std::string::npos || close - open > 24) return false;

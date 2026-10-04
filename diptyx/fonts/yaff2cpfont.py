@@ -38,29 +38,26 @@ def parse_yaff(path):
     rows = []
     gprops = {}
     in_glyph = False
+    empty = False  # the current glyph block was the empty-glyph marker "-"
 
     def flush():
-        nonlocal labels, rows, gprops, in_glyph
+        nonlocal labels, rows, gprops, in_glyph, empty
         if in_glyph and labels:
-            cp = None
-            for lab in labels:
-                m = re.fullmatch(r"u\+([0-9a-fA-F]{4,6})", lab)
-                if m:
-                    cp = int(m.group(1), 16)
-                    break
-            if cp is None:  # no Unicode label: decode a single-byte label as Mac Roman
+            cps = [int(m.group(1), 16) for m in (re.fullmatch(r"u\+([0-9a-fA-F]{4,6})", lab) for lab in labels) if m]
+            if not cps:  # no Unicode label: decode a single-byte label as Mac Roman
                 for lab in labels:
                     m = re.fullmatch(r"0x([0-9a-fA-F]{2})", lab)
                     if m and int(m.group(1), 16) >= 0x20:
                         try:
-                            cp = ord(bytes([int(m.group(1), 16)]).decode("mac_roman"))
+                            cps = [ord(bytes([int(m.group(1), 16)]).decode("mac_roman"))]
                         except (UnicodeDecodeError, ValueError):
-                            cp = None
+                            pass
                         break
-            if cp is not None and cp not in glyphs:
-                glyphs[cp] = (list(rows), int(gprops.get("left-bearing", 0)), int(gprops.get("right-bearing", 0)),
-                              int(gprops["shift-up"]) if "shift-up" in gprops else None)
-        labels, rows, gprops, in_glyph = [], [], {}, False
+            for cp in cps:  # every label names the same glyph
+                if cp not in glyphs:
+                    glyphs[cp] = (list(rows), int(gprops.get("left-bearing", 0)), int(gprops.get("right-bearing", 0)),
+                                  int(gprops["shift-up"]) if "shift-up" in gprops else None)
+        labels, rows, gprops, in_glyph, empty = [], [], {}, False, False
 
     with open(path, encoding="utf-8") as fh:
         for raw in fh:
@@ -73,7 +70,7 @@ def parse_yaff(path):
                     continue
                 key, value = m.group(1), m.group(2)
                 if value == "":  # a glyph label; several labels in a row name the same glyph
-                    if in_glyph and (rows or gprops):
+                    if in_glyph and (rows or gprops or empty):
                         flush()
                     in_glyph = True
                     labels.append(key)
@@ -85,7 +82,9 @@ def parse_yaff(path):
                 body = line.strip()
                 if re.fullmatch(r"[.@]+", body):
                     rows.append(body)
-                elif body != "-":  # "-" is an empty glyph
+                elif body == "-":  # an empty glyph: the next label starts a new one
+                    empty = True
+                else:
                     m = re.fullmatch(r"([\w-]+):\s*(-?\d+)", body)
                     if m:
                         gprops[m.group(1)] = m.group(2)
@@ -126,6 +125,9 @@ def build_style(path, scale):
         rows = [r.ljust(width, ".") for r in rows]
         shift = font_shift if shift is None else shift
         advance = left + width + right
+        if not (0 <= advance * scale < 4096 and width * scale < 256 and height * scale < 256):
+            raise SystemExit(f"{path}: glyph U+{cp:04X} does not fit the format (size {width}x{height}, advance "
+                             f"{advance} at scale {scale}; width and height must stay under 256 px, advance 0..4095 px)")
         entries.append((width * scale, height * scale, (advance * scale) << 4, left * scale, (height + shift) * scale,
                         pack_bitmap(rows, scale)))
     if not ascent:

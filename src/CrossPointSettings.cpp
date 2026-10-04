@@ -272,7 +272,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
 
   // The Diptyx reads in portrait only (the two-page spread needs it), so an orientation saved elsewhere is dropped.
-  if (BoardConfig::isDiptyx()) orientation = PORTRAIT;
+  if (BoardConfig::isDiptyx()) {
+    orientation = PORTRAIT;
+    // The Orientation Change long-press choice is hidden there too; a stored one would still change page-turn timing.
+    if (longPressButtonBehavior == ORIENTATION_CHANGE) longPressButtonBehavior = OFF;
+  }
 
   LOG_DBG("CPS", "Settings loaded from file");
 

@@ -182,6 +182,7 @@ enum class BootResume : uint8_t {
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static volatile bool deepSleepInProgress = false;  // also read by the Diptyx power failsafe task
+static volatile bool sleepPreparing = false;       // set from the start of enterDeepSleep(); read by the failsafe task
 
 // A silent restart is internal maintenance, so the light must come back exactly
 // as the user left it. SETTINGS.frontlightOn is the saved preference and
@@ -355,6 +356,7 @@ static void deliverSleepPluginEvents() {
 // powerOff: Diptyx only, release the power latch (see HalPowerManager::startDeepSleep()).
 void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+  sleepPreparing = true;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   // Sleep may end in a power-off (battery death, latch); persist the clock
@@ -490,7 +492,7 @@ static void powerFailsafeTask(void*) {
     }
     if (!armed) continue;
     heldMs += POWER_FAILSAFE_POLL_MS;
-    if (heldMs < (deepSleepInProgress ? POWER_FAILSAFE_SLEEPING_MS : POWER_FAILSAFE_MS)) continue;
+    if (heldMs < ((deepSleepInProgress || sleepPreparing) ? POWER_FAILSAFE_SLEEPING_MS : POWER_FAILSAFE_MS)) continue;
 
     esp_rom_printf("[PWR] failsafe: power button held %u ms, powering off\n", static_cast<unsigned>(heldMs));
     // Acknowledge: blink the status LED so you know it is time to let go.
@@ -527,8 +529,7 @@ static bool recordBuildBoot() {
   if (esp_app_get_elf_sha256(build, sizeof(build)) <= 0) return false;
   if (Storage.readFile(kBuildFile) == build) return false;
   Storage.ensureDirectoryExists("/.crosspoint");
-  Storage.writeFile(kBuildFile, build);
-  return true;
+  return Storage.writeFile(kBuildFile, build);
 }
 
 void setup() {

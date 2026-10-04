@@ -2150,6 +2150,7 @@ bool EpubReaderActivity::showBookmarkPopupOnly() {
 void EpubReaderActivity::dismissBookmarkPopup() {
   if (!bookmarkPopupStored) return;
   RenderLock lock;
+  if (!bookmarkPopupStored) return;  // a render that ran first already discarded the stored frame
   bookmarkPopupStored = false;
   showBookmarkMessage = false;
   bookmarkMessageDrawn = false;
