@@ -302,8 +302,10 @@ def cmd_flash(args):
             if not ask("Flash now?", True, args.yes or None):
                 print("Cancelled; nothing was written.")
                 return 1
-            written = True  # the write below resets the chip itself (default reset)
-            rc, _ = esptool("--chip", "esp32s3", "--port", port, "write-flash", hex(APP_OFFSET), firmware)
+            written = True  # the write below restarts the chip itself
+            # watchdog-reset: a plain RTS reset can leave the chip in download mode after a center-button entry
+            rc, _ = esptool("--chip", "esp32s3", "--port", port, "--after", "watchdog-reset", "write-flash",
+                            hex(APP_OFFSET), firmware)
             if rc != 0:
                 die("Flashing failed. The device is still recoverable: put it in download mode and run this again.")
         finally:
