@@ -608,7 +608,11 @@ void setup() {
     snprintf(reason, sizeof(reason), "reset=%d cause=%d wake=%d usb=%d first=%d", static_cast<int>(esp_reset_reason()),
              static_cast<int>(esp_sleep_get_wakeup_cause()), static_cast<int>(wakeupReason),
              gpio.isUsbConnected() ? 1 : 0, firstBootOfThisBuild ? 1 : 0);
-    Storage.writeFile("/.crosspoint/last_boot_reason", String(reason));
+    String log = Storage.readFile("/.crosspoint/last_boot_reason");
+    log += reason;
+    log += "\n";
+    if (log.length() > 600) log = log.substring(log.length() - 600);  // keep the last few boots
+    Storage.writeFile("/.crosspoint/last_boot_reason", log);
   }
 
   APP_STATE.loadFromFile();
@@ -657,7 +661,9 @@ void setup() {
     case HalGPIO::WakeupReason::PowerButton:
       // With Short Power Button Press = Sleep, a single click wakes on any
       // device; otherwise the button must still be held (ghost-wake debounce).
-      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+      // The first boot of a newly flashed Diptyx build always stays awake, so a fresh flash starts by itself.
+      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP &&
+          !firstBootOfThisBuild) {
         LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
         Storage.prepareForDeepSleep();
         powerManager.startDeepSleep(gpio);
