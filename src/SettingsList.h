@@ -225,13 +225,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_RIGHT] = StrId::STR_DIR_RIGHT;
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_LEFT] = StrId::STR_DIR_LEFT;
 
+    // The Diptyx has two panels, so these three rows (which drive the left panel) say "Left".
+    const bool dualPanel = BoardConfig::isDiptyx();
     std::vector<SettingInfo> v = {
         // --- Display ---
-        SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
-                          "sleepScreen", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
-                          {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
+        SettingInfo::Enum(dualPanel ? StrId::STR_LEFT_SLEEP_SCREEN : StrId::STR_SLEEP_SCREEN,
+                          &CrossPointSettings::sleepScreen, std::move(sleepScreenValues), "sleepScreen",
+                          StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(dualPanel ? StrId::STR_LEFT_COVER_MODE : StrId::STR_SLEEP_COVER_MODE,
+                          &CrossPointSettings::sleepScreenCoverMode, {StrId::STR_FIT, StrId::STR_CROP},
+                          "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(dualPanel ? StrId::STR_LEFT_COVER_FILTER : StrId::STR_SLEEP_COVER_FILTER,
+                          &CrossPointSettings::sleepScreenCoverFilter,
                           {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
                           "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_RIGHT_SLEEP_SCREEN, &CrossPointSettings::rightSleepScreen,
