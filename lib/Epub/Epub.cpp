@@ -802,7 +802,9 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds), coverBmp)) {
       return false;
     }
-    const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped, originalThresholds);
+    const bool success = BoardConfig::isDiptyx()
+                             ? PngToBmpConverter::pngFileTo1BitCoverBmpStream(coverPng, coverBmp, cropped)
+                             : PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped, originalThresholds);
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
     coverBmp.close();

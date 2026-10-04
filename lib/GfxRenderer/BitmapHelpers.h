@@ -13,6 +13,9 @@ struct BmpHeader;
 uint8_t quantize(int gray, int x, int y);
 uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
+// Gamma 0.8 tone curve for covers dithered to 1 bit for a black-and-white-only panel: without it mid-grey
+// strokes come out dark and stippled.
+uint8_t bwToneCurve(uint8_t gray);
 int adjustPixel(int gray);
 
 struct GrayPlanePixel {

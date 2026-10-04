@@ -1,5 +1,6 @@
 #include "BitmapHelpers.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>  // Added for memset
 
@@ -106,6 +107,18 @@ uint8_t quantize1bit(int gray, int x, int y) {
   // The noise adds variation around the 128 midpoint
   const int adjustedThreshold = 128 + ((threshold - 128) / 2);  // Range: 64-192
   return (gray >= adjustedThreshold) ? 1 : 0;
+}
+
+uint8_t bwToneCurve(const uint8_t gray) {
+  static uint8_t lut[256];
+  static bool ready = false;
+  if (!ready) {
+    for (int i = 0; i < 256; i++) {
+      lut[i] = static_cast<uint8_t>(255.0f * powf(static_cast<float>(i) / 255.0f, 0.8f) + 0.5f);
+    }
+    ready = true;
+  }
+  return lut[gray];
 }
 
 void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder rowOrder) {
