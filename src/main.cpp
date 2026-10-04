@@ -353,15 +353,6 @@ static void deliverSleepPluginEvents() {
 
 // Enter deep sleep mode
 // powerOff: Diptyx only, release the power latch (see HalPowerManager::startDeepSleep()).
-// Temporary diagnostic: appends one line to /.crosspoint/last_boot_reason (the last ~600 characters are kept).
-static void noteBoot(const char* line) {
-  String log = Storage.readFile("/.crosspoint/last_boot_reason");
-  log += line;
-  log += "\n";
-  if (log.length() > 600) log = log.substring(log.length() - 600);
-  Storage.writeFile("/.crosspoint/last_boot_reason", log);
-}
-
 void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
@@ -401,12 +392,6 @@ void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
     WiFi.mode(WIFI_OFF);
   }
 
-  if (BoardConfig::isDiptyx()) {
-    char note[64];
-    snprintf(note, sizeof(note), "sleep powerOff=%d timeout=%d usb=%d", powerOff ? 1 : 0, fromTimeout ? 1 : 0,
-             gpio.isUsbConnected() ? 1 : 0);
-    noteBoot(note);
-  }
   halTiltSensor.deepSleep();
   display.deepSleep();
   Storage.prepareForDeepSleep();
@@ -616,15 +601,7 @@ void setup() {
   }
 
   HalSystem::checkPanic();
-  if (BoardConfig::isDiptyx()) {
-    firstBootOfThisBuild = recordBuildBoot();
-    // Diagnostic for post-flash behavior: the boot facts, kept on the SD card.
-    char reason[96];
-    snprintf(reason, sizeof(reason), "reset=%d cause=%d wake=%d usb=%d first=%d", static_cast<int>(esp_reset_reason()),
-             static_cast<int>(esp_sleep_get_wakeup_cause()), static_cast<int>(wakeupReason),
-             gpio.isUsbConnected() ? 1 : 0, firstBootOfThisBuild ? 1 : 0);
-    noteBoot(reason);
-  }
+  if (BoardConfig::isDiptyx()) firstBootOfThisBuild = recordBuildBoot();
 
   APP_STATE.loadFromFile();
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
