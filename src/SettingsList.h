@@ -332,7 +332,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                           StrId::STR_CAT_READER),
         // --- Controls ---
-        SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
+        // On the Diptyx the "side buttons" are the center rocker.
+        SettingInfo::Enum(dualPanel ? StrId::STR_CENTER_UPDOWN_READER : StrId::STR_SIDE_BTN_LAYOUT,
+                          &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT,
                            StrId::STR_PREV_PREV},
                           "sideButtonLayout", StrId::STR_CAT_CONTROLS),
@@ -364,13 +366,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
 #if FREEINK_CAP_TOUCH
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
+                          {StrId::STR_IGNORE, dualPanel ? StrId::STR_POWER_OFF_ACTION : StrId::STR_SLEEP,
+                           StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
         SettingInfo::Enum(
             StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
+            {StrId::STR_IGNORE, dualPanel ? StrId::STR_POWER_OFF_ACTION : StrId::STR_SLEEP, StrId::STR_PAGE_TURN,
+             StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
         // Erased below unless the QMI8658 IMU is present (X3).
@@ -520,6 +523,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_SLEEP_SCREEN);
     // Quick Resume on Timeout is not verified on the Diptyx (two panels, wake is a reboot), so it is hidden there.
     if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_QUICK_RESUME_TIMEOUT);
+    // The Diptyx reads in portrait with a spread, so front buttons never follow an orientation.
+    if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION);
     return v;
   }();
 

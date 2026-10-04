@@ -89,7 +89,8 @@ void SettingsActivity::rebuildSettingsLists() {
   }
 
   // Append device-only ACTION items
-  if (!BoardConfig::hasTouch()) {
+  // The remap flow asks for four front buttons; the Diptyx has no "Left" one, so it could not be completed there.
+  if (!BoardConfig::hasTouch() && !BoardConfig::isDiptyx()) {
     controlsSettings.insert(controlsSettings.begin(),
                             SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   }
