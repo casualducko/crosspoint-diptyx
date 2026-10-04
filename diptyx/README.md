@@ -104,14 +104,15 @@ power button).
 ## Library books (Libby)
 
 Unofficial: it uses third-party plugins and a third-party account service, and Libby or the plugins can change. Tested start to finish on
-the Diptyx. You need Wi-Fi, Libby, and a free [DTS ByteBooks](https://dtsbytebooks.com/register) account (separate from your library card;
-use an email and password you do not use elsewhere).
+the Diptyx. You need Wi-Fi and Libby.
 
-1. **Plugin Store:** download [`plugin-store.zip`](https://github.com/itsthisjustin/sd-plugins/releases/download/plugin-store/plugin-store.zip)
+1. **ByteBooks account:** sign up free at [dtsbytebooks.com/register](https://dtsbytebooks.com/register). It is separate from your library card
+   and only lets the reader open protected books; use an email and password you do not use elsewhere.
+2. **Plugin Store:** download [`plugin-store.zip`](https://github.com/itsthisjustin/sd-plugins/releases/download/plugin-store/plugin-store.zip)
    and unzip it at the SD card root. On the reader open *Settings > System > Plugins > Plugin Store* and install **Protected Content**.
-2. **Activate once:** start *File Transfer* in *Join Network* mode (not Hotspot), open the address it shows from your computer, and in the
+3. **Activate once:** start *File Transfer* in *Join Network* mode (not Hotspot), open the address it shows from your computer, and in the
    *Protected Content* card enter the ByteBooks login and press *Activate device*.
-3. **Each book:** borrow it in Libby, open the loan, choose *Read with...* and download the `.acsm` file. Upload it to the card root in
+4. **Each book:** borrow it in Libby, open the loan, choose *Read with...* and download the `.acsm` file. Upload it to the card root in
    *File Manager*, then in the plugin card press *Refresh files*, select it and press *Fetch selected book*. Open the EPUB from the file browser.
 
 Only titles that offer *Read with...* work (not Kindle-only ones). The book stays protected and stops opening when the loan ends. The separate
