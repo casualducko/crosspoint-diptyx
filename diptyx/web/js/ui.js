@@ -137,6 +137,10 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 const AFTER = [
   'The Diptyx restarts by itself and shows the CrossPoint home screen within about 20 seconds.',
 ];
+const AFTER_OWN = ['The Diptyx restarts by itself within about 20 seconds.'];
+const AFTER_STOCK = [
+  'The Diptyx restarts by itself into the stock firmware within about 20 seconds. Your settings and books are untouched.',
+];
 
 function onInstall() {
   const fw = manifest.firmware;
@@ -149,7 +153,7 @@ function onInstall() {
 function onRestore() {
   if (!confirm(`Replace the app with the stock Diptyx firmware ${STOCK_APP.version}? Your settings and books are not touched.`)) return;
   run('Restoring the stock firmware', ['download', 'check', 'verify-file', 'write', 'verify-write', 'reset'],
-    () => restoreStock(driver, hooks()), 'The stock firmware is back.', AFTER);
+    () => restoreStock(driver, hooks()), 'The stock firmware is back.', AFTER_STOCK);
 }
 
 async function onOwnFile(ev) {
@@ -158,7 +162,7 @@ async function onOwnFile(ev) {
   if (!file || busy || !driver) return;
   if (!confirm(`Install "${file.name}" (${file.size.toLocaleString()} bytes) into the app slot?`)) return;
   run('Installing ' + file.name, ['check', 'verify-file', 'write', 'verify-write', 'reset'],
-    async () => installApp(driver, new Uint8Array(await file.arrayBuffer()), hooks()), 'Your firmware is installed.', AFTER);
+    async () => installApp(driver, new Uint8Array(await file.arrayBuffer()), hooks()), 'Your firmware is installed.', AFTER_OWN);
 }
 
 async function onBackup() {
