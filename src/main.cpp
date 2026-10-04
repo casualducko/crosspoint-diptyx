@@ -621,7 +621,18 @@ void setup() {
   }
   // Diptyx stock reading font: Literata Mono (the built-in serif family) at 10 pt. Seeded before the load, like the
   // reader menu style below it, so a saved choice still wins and only a fresh install gets it.
-  if (BoardConfig::isDiptyx()) SETTINGS.fontPointSize = 10;
+  if (BoardConfig::isDiptyx()) {
+    SETTINGS.fontPointSize = 10;
+    // Reading layout defaults for a fresh install; keys present in a saved file win.
+    SETTINGS.lineSpacing = CrossPointSettings::TIGHT;
+    SETTINGS.extraParagraphSpacing = 0;
+    SETTINGS.paragraphIndentSpaces = 4;
+    SETTINGS.screenMargin = 20;
+    SETTINGS.embeddedStyle = 0;
+    SETTINGS.statusBarChapterPageCount = 0;
+    SETTINGS.statusBarProgressBar = CrossPointSettings::CHAPTER_PROGRESS;
+    SETTINGS.sleepScreenCoverMode = CrossPointSettings::CROP;
+  }
   SETTINGS.loadFromFile();
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).
