@@ -7,7 +7,6 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
-#include <I18n.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -148,9 +147,6 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
   }
 }
 
-// Set when the device is about to power off on battery (see RightPanel::setPoweringOff()).
-bool poweringOff = false;
-
 // A quiet sleep layout: the title in a serif face with the author below a short rule, on plain white, a little above
 // the vertical middle.
 void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
@@ -166,9 +162,6 @@ void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
     y += 22;
     drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
   }
-  // The power button cannot wake a sleeping Diptyx; the page and center buttons do. After a power-off none of them
-  // can, so the hint is left out.
-  if (!poweringOff) r.drawCenteredText(UI_10_FONT_ID, h - 70, I18N.get(StrId::STR_WAKE_HINT_RIGHT_SLEEP));
 }
 
 // Makes sure the 1-bit conversion of the stock idle image is cached. False if there is no usable image. This decodes a
@@ -306,8 +299,6 @@ void forgetFrame() { storedValid = false; }
 }  // namespace detail
 
 void markDirty() { shownKey = 0; }
-
-void setPoweringOff(const bool off) { poweringOff = off; }
 
 void showSleepScreen(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;
