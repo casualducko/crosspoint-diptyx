@@ -135,12 +135,12 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 }
 
 const AFTER = [
-  'The Diptyx restarts and shows the CrossPoint home screen within about 20 seconds.',
-  'If the screens stay unchanged, press the left page button to wake it.',
+  'The Diptyx restarts by itself into CrossPoint in a few seconds.',
+  'Note: If the screens stay unchanged, press the left page button to wake it.',
 ];
 const AFTER_OWN = [
-  'The Diptyx restarts within about 20 seconds.',
-  'If the screens stay unchanged, press the left page button to wake it.',
+  'The Diptyx restarts by itself in a few seconds.',
+  'Note: If the screens stay unchanged, press the left page button to wake it.',
 ];
 const AFTER_STOCK = [
   'The Diptyx restarts by itself into the stock firmware in a few seconds. Your settings and books are untouched.',
