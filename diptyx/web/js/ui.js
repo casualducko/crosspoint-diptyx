@@ -135,8 +135,8 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 }
 
 const AFTER = [
-  'Unplug the USB cable, then plug it in again without touching the center button.',
-  'The Diptyx starts normally. If the screens stay blank for more than a minute, unplug it, switch off for 20 seconds and plug it in again.',
+  'The Diptyx should start by itself within about 20 seconds. Keep your hands off the center button, or it goes back into download mode.',
+  'If the screens stay unchanged, press the left page button. A Diptyx powered over USB goes to sleep after a cold start, and that button wakes it. The power button does not.',
 ];
 
 function onInstall() {

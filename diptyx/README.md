@@ -76,8 +76,10 @@ Other commands: `./flash.sh check` (inspect only, writes nothing), `./flash.sh b
 
 ## After flashing
 
-Unplug the cable and plug it in again without touching the center button. The left screen shows the CrossPoint home screen; the right screen
-fills in with the card for your current book after a few seconds.
+The Diptyx should start by itself within about 20 seconds; keep your hands off the center button, or it goes back into download mode. If the
+screens stay unchanged, **press the left page button**: a Diptyx powered over USB goes to sleep after a cold start, and that button wakes it (the
+power button does not). The left screen shows the CrossPoint home screen; the right screen fills in with the card for your current book after a
+few seconds.
 
 The Diptyx has five controls: a left button, a center rocker that presses and moves up and down, and a right button (plus the
 power button).
@@ -118,7 +120,7 @@ Your stock settings are untouched by CrossPoint, so the stock firmware comes bac
 - **Windows:** no driver is needed on Windows 10/11. If *Device Manager* shows an unknown device, run Windows Update or install the
   Espressif USB JTAG/serial driver.
 - **macOS:** nothing to install. If it asks for permission to access removable devices, allow it.
-- **After flashing it sits in download mode:** unplug, switch off for 20 seconds, plug in again *without* touching the center button.
+- **After flashing nothing happens:** press the left page button (see *After flashing*). If it is back in download mode, let go of the center button, unplug, wait 10 seconds and plug in again.
 - **Screen contrast looks washed out or too dark:** the display voltage (VCOM) is read from your unit's own settings left by the stock
   firmware (`vcomLeft` / `vcomRight`); if there are none (a unit that never ran the stock firmware) it uses the stock default, 23. The serial
   log shows the values used (`[DIPTYX] left panel VCOM ...`). Open an issue with your stock values if the picture still looks wrong.
