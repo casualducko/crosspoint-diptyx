@@ -1,6 +1,14 @@
 # CrossPoint Reader
 
-> **Diptyx port:** the `diptyx-*` branches of this repository run CrossPoint on the Diptyx dual-screen e-reader (two-page spread, right-screen cover card). Install guide for Windows, macOS and Linux: [diptyx/README.md](diptyx/README.md).
+> ## Unofficial Diptyx port
+>
+> The `diptyx-*` branches of this repository run CrossPoint on the **[Diptyx](https://diptyx.dev) dual-screen e-reader** (ESP32-S3, two 648x480 black-and-white panels). This is an unofficial community port: it is not affiliated with, or supported by, the CrossPoint project or the Diptyx makers. Use it at your own risk; the stock firmware is always one click away.
+>
+> - **What you get:** the CrossPoint reader on the left screen, a two-page spread across both screens, a cover card or title card on the right screen, mono-hinted reader fonts tuned for the black-and-white panels (Literata Mono and Noto Sans built in, more in the [font pack](https://github.com/casualducko/diptyx-mono-fonts)), and a browser flasher.
+> - **Install:** use the web flasher at <https://casualducko.github.io/crosspoint-diptyx/> (Chrome or Edge) or the flash script. Full guide, including how to go back to stock: [diptyx/README.md](diptyx/README.md).
+> - **What differs from upstream:** the Diptyx work lives on the `diptyx-<release>` branches, one per upstream release: upstream's release plus a small stack of Diptyx commits on top, so `git log` shows exactly what was changed.
+> - **Issues:** problems with the Diptyx port belong here. Problems with CrossPoint itself belong upstream at [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader).
+> - **Licence:** CrossPoint is MIT. The compiled firmware also contains third-party code, notably wolfSSL under the GPL-2.0, so the firmware binary as a whole is distributed under the GPL-2.0 with its complete source in this repository. See [NOTICE](NOTICE).
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
