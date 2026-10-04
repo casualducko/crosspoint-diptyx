@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -220,6 +221,7 @@ struct BmpConvertCtx {
   int outWidth;
   int outHeight;
   bool oneBit;
+  bool toneForBw;  // lighten midtones before the 1-bit dither so grey text and linework come out solid
   int bytesPerRow;
   bool needsScaling;
   uint32_t scaleX_fp;  // source pixels per output pixel, 16.16 fixed-point
@@ -256,6 +258,20 @@ struct BmpConvertCtx {
   bool error;
 };
 
+// Gamma 0.8 tone curve: a black-and-white panel cannot show greys, so mid-grey strokes look dark and stippled
+// without it.
+static uint8_t bwTone(const uint8_t gray) {
+  static uint8_t lut[256];
+  static bool ready = false;
+  if (!ready) {
+    for (int i = 0; i < 256; i++) {
+      lut[i] = static_cast<uint8_t>(255.0f * powf(static_cast<float>(i) / 255.0f, 0.8f) + 0.5f);
+    }
+    ready = true;
+  }
+  return lut[gray];
+}
+
 static void yieldDuringDecode(BmpConvertCtx* ctx) {
   if (++ctx->rowsSinceYield < 8) return;
   ctx->rowsSinceYield = 0;
@@ -278,8 +294,9 @@ static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) 
     }
   } else if (ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(srcRow[x], x)
-                                                    : quantize1bit(srcRow[x], x, outY);
+      const uint8_t gray = ctx->toneForBw ? bwTone(srcRow[x]) : srcRow[x];
+      const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(gray, x)
+                                                    : quantize1bit(gray, x, outY);
       ctx->bmpRow[x / 8] |= (bit << (7 - (x % 8)));
     }
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
@@ -399,7 +416,8 @@ static void flushScaledRow(BmpConvertCtx* ctx) {
     }
   } else if (ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
+      uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
+      if (ctx->toneForBw) gray = bwTone(gray);
       const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(gray, x)
                                                     : quantize1bit(gray, x, ctx->currentOutY);
       ctx->bmpRow[x / 8] |= (bit << (7 - (x % 8)));
@@ -513,7 +531,7 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
                                                      int targetHeight, bool oneBit, bool crop,
-                                                     bool originalThresholds) {
+                                                     bool originalThresholds, bool toneForBw) {
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -623,6 +641,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   ctx.outWidth = outWidth;
   ctx.outHeight = outHeight;
   ctx.oneBit = oneBit;
+  ctx.toneForBw = toneForBw;
   ctx.bytesPerRow = bytesPerRow;
   ctx.needsScaling = needsScaling;
   ctx.scaleX_fp = scaleX_fp;
@@ -719,6 +738,13 @@ bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, b
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop, originalThresholds);
+}
+
+// Cover for a black-and-white-only panel (the Diptyx)
+bool JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop) {
+  const int targetWidth = display.getDisplayHeight();
+  const int targetHeight = display.getDisplayWidth();
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, true, crop, false, true);
 }
 
 // Convert with custom target size (for thumbnails, 2-bit)

@@ -1,5 +1,6 @@
 #include "Epub.h"
 
+#include <BoardConfig.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
@@ -727,8 +728,9 @@ const std::string& Epub::getLanguage() const {
 }
 
 std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
-  const auto coverFileName =
-      std::string("cover") + (originalThresholds ? "_original" : "_legacy_v2") + (cropped ? "_crop" : "");
+  // The Diptyx panels are black and white, so its covers are 1-bit dithers kept apart from the 2-bit ones.
+  const char* variant = BoardConfig::isDiptyx() ? "_bw_v1" : (originalThresholds ? "_original" : "_legacy_v2");
+  const auto coverFileName = std::string("cover") + variant + (cropped ? "_crop" : "");
   return cachePath + "/" + coverFileName + ".bmp";
 }
 
@@ -769,7 +771,9 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds), coverBmp)) {
       return false;
     }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped, originalThresholds);
+    const bool success = BoardConfig::isDiptyx()
+                             ? JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(coverJpg, coverBmp, cropped)
+                             : JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped, originalThresholds);
     // Explicitly close() files before calling Storage.remove()
     coverJpg.close();
     coverBmp.close();
