@@ -227,6 +227,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 
     // The Diptyx has two panels, so these three rows (which drive the left panel) say "Left".
     const bool dualPanel = BoardConfig::isDiptyx();
+    // Orientation Change (the last choice) would turn the Diptyx off its portrait-only spread, so it is left out.
+    std::vector<StrId> longPressBehaviorValues = {StrId::STR_LONG_PRESS_BEHAVIOR_OFF,
+                                                  StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
+                                                  StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION};
+    if (dualPanel) longPressBehaviorValues.pop_back();
     std::vector<SettingInfo> v = {
         // --- Display ---
         SettingInfo::Enum(dualPanel ? StrId::STR_LEFT_SLEEP_SCREEN : StrId::STR_SLEEP_SCREEN,
@@ -356,9 +361,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::frontButtonFollowOrientation,
                             "frontButtonFollowOrientation", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_BEHAVIOR, &CrossPointSettings::longPressButtonBehavior,
-                          {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
-                           StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
-                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
+                          std::move(longPressBehaviorValues), "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
         // Erased below unless the board is an X4 Pro.
