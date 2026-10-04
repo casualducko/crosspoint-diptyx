@@ -528,6 +528,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_QUICK_RESUME_TIMEOUT);
     // The Diptyx reads in portrait with a spread, so front buttons never follow an orientation.
     if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION);
+    // The Diptyx reads in portrait only: the two-page spread needs it and the panels cannot be turned.
+    if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_ORIENTATION);
     return v;
   }();
 

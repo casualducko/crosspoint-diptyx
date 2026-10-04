@@ -271,6 +271,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     requestResave();
   }
 
+  // The Diptyx reads in portrait only (the two-page spread needs it), so an orientation saved elsewhere is dropped.
+  if (BoardConfig::isDiptyx()) orientation = PORTRAIT;
+
   LOG_DBG("CPS", "Settings loaded from file");
 
   return true;
