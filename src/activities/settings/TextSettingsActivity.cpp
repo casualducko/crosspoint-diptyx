@@ -1,5 +1,6 @@
 #include "TextSettingsActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -29,7 +30,7 @@ constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
     StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
-                                        StrId::STR_TEXT_AA};
+                                        StrId::STR_TEXT_AA, StrId::STR_BOLD_TEXT};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -504,6 +505,10 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
       break;
+    case StyleRow::BoldText:
+      SETTINGS.fontWeight = SETTINGS.fontWeight == CrossPointSettings::WEIGHT_BOLD ? CrossPointSettings::WEIGHT_REGULAR
+                                                                           : CrossPointSettings::WEIGHT_BOLD;
+      break;
 
     default:
       return;
@@ -522,6 +527,8 @@ bool TextSettingsActivity::styleRowChecked(int row) const {
       return SETTINGS.embeddedStyle;
     case StyleRow::AntiAliasing:
       return SETTINGS.textAntiAliasing;
+    case StyleRow::BoldText:
+      return SETTINGS.fontWeight == CrossPointSettings::WEIGHT_BOLD;
 
     default:
       return false;
@@ -533,7 +540,8 @@ bool TextSettingsActivity::styleRowChecked(int row) const {
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (ringPos() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
+  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing ||
+         row == StyleRow::BoldText;
 }
 
 void TextSettingsActivity::switchTab(const int direction) {
@@ -556,7 +564,8 @@ int TextSettingsActivity::listCount() const {
     case Tab::Layout:
       return static_cast<int>(LayoutRow::Count);
     case Tab::Style:
-      return static_cast<int>(StyleRow::Count);
+      // Bold Text (Reader Font Weight) is a Diptyx addition.
+      return static_cast<int>(StyleRow::Count) - (BoardConfig::isDiptyx() ? 0 : 1);
 
     default:
       return 0;
