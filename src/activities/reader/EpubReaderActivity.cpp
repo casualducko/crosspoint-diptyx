@@ -489,8 +489,12 @@ void EpubReaderActivity::loop() {
   const auto touch =
       ReaderUtils::detectTouchPageTurn(renderer, mappedInput, ReaderUtils::isRtlBookLanguage(epub->getLanguage()));
 
-  if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+  // Until the popup has been drawn the timer runs from the press, with a generous cap in case it never gets drawn.
+  const unsigned long bookmarkMessageLimitMs =
+      bookmarkMessageDrawn ? ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS : 10 * ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS;
+  if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= bookmarkMessageLimitMs) {
     showBookmarkMessage = false;
+    bookmarkMessageDrawn = false;
     requestUpdate();
   }
 
@@ -1595,6 +1599,10 @@ void EpubReaderActivity::renderBook() {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+    if (!bookmarkMessageDrawn) {
+      bookmarkMessageDrawn = true;
+      bookmarkMessageTime = millis();  // the 2.5 s start once the popup is on the panel
+    }
   }
 
   if (showDictionaryMessage) {

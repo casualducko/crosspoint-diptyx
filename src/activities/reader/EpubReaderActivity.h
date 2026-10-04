@@ -52,6 +52,8 @@ class EpubReaderActivity final : public ReaderActivity {
   std::vector<BookmarkEntry> cachedBookmarks;
   bool recentsEntryRemoved = false;
   unsigned long bookmarkMessageTime = 0UL;
+  // The message timer restarts when the popup is actually drawn: on a slow two-panel refresh the render can outlast it.
+  bool bookmarkMessageDrawn = false;
   bool pendingReadFolderMove = false;
 
   // Toolbar reader menu (SETTINGS.readerMenuStyle == READER_MENU_TOOLBAR): drawn
