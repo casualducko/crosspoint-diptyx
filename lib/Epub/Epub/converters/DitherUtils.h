@@ -40,11 +40,14 @@ inline const uint8_t bayer8x8[8][8] = {
     {63, 31, 55, 23, 61, 29, 53, 21},
 };
 
-// Black-and-white panel: tone-curve the gray, then threshold it against the Bayer matrix. Returns 0 (black) or
-// 3 (white), the only two levels the BW pass can show; the 4-level dither above would push every mid-gray to black.
+// Black-and-white panel: tone-curve the gray, stretch 40..224 to 0..255 (the range the home-screen cover's Atkinson
+// dither resolves, it clips shadows to black and highlights to white), then threshold against the Bayer matrix. Returns
+// 0 (black) or 3 (white), the only two levels the BW pass can show; the 4-level dither above would push every mid-gray
+// to black.
 inline uint8_t applyBayerDither1Bit(uint8_t gray, int x, int y) {
-  const int threshold = bayer8x8[y & 7][x & 7] * 4 + 2;
-  return bwToneCurve(gray) >= threshold ? 3 : 0;
+  const int tone = bwToneCurve(gray);
+  const int stretched = tone <= 40 ? 0 : (tone >= 224 ? 255 : ((tone - 40) * 355) >> 8);
+  return stretched >= bayer8x8[y & 7][x & 7] * 4 + 2 ? 3 : 0;
 }
 
 // The dither for the active panel: 1-bit on the Diptyx, 4 gray levels elsewhere.

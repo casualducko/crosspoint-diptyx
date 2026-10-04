@@ -35,9 +35,9 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 namespace {
 
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache); the Diptyx caches its 1-bit dither as .pxb so older 4-level caches are
-  // not reused
-  const char* ext = BoardConfig::isDiptyx() ? ".pxb" : ".pxc";
+  // Replace extension with .pxc (pixel cache); the Diptyx caches its 1-bit dither as .pxd (renamed when the dither
+  // changes) so caches written by an earlier dither are not reused
+  const char* ext = BoardConfig::isDiptyx() ? ".pxd" : ".pxc";
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
     return imagePath.substr(0, dotPos) + ext;
