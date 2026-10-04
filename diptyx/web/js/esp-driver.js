@@ -65,14 +65,22 @@ export class EspDriver {
 
   // The ESP32-S3 ROM can leave a "force download boot" flag set after a USB entry into the bootloader; a plain reset then
   // lands in download mode again and the Diptyx never starts. Clear it first, as the esptool command line does (the register
-  // is RTC_CNTL_OPTION1_REG, bit 0), then do the normal RTS reset.
+  // is RTC_CNTL_OPTION1_REG, bit 0), then reset the chip.
   async reset() {
     try {
       await this.loader.writeReg(RTC_CNTL_OPTION1_REG, 0, RTC_CNTL_FORCE_DOWNLOAD_BOOT_MASK);
     } catch (e) {
       this.log('Could not clear the forced download boot flag: ' + (e && e.message ? e.message : e));
     }
-    await this.loader.after('hard_reset');
+    // esptool-js's own hard reset only releases RTS and never pulls EN low first, so after the flash no reset happened and the
+    // chip sat in the bootloader. Run the full sequence: DTR low (GPIO0 high), RTS high (EN low), then release RTS.
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const t = this.transport;
+    await t.setDTR(false);
+    await t.setRTS(true);
+    await sleep(120);
+    await t.setRTS(false);
+    await sleep(200);
   }
 
   // Releases the serial port. esptool-js's disconnect() waits for its streams to unlock with no timeout, so it is raced
