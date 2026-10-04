@@ -280,6 +280,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // this entry is always replaced by buildFontSizeSetting() below. It only
         // fixes the setting's position in the Reader category.
         SettingInfo::Enum(StrId::STR_FONT_SIZE, nullptr, {}, "fontSize", StrId::STR_CAT_READER).withTextSettings(),
+        SettingInfo::Enum(StrId::STR_FONT_WEIGHT, &CrossPointSettings::fontWeight,
+                          {StrId::STR_WEIGHT_REGULAR, StrId::STR_WEIGHT_BOLD}, "fontWeight", StrId::STR_CAT_READER)
+            .withTextSettings(),
         SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
                           {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE}, "lineSpacing",
                           StrId::STR_CAT_READER)
@@ -520,6 +523,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
     // Tilt page turn needs the QMI8658 IMU (X3).
     if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
+    // Reader Font Weight (a bold body) is a Diptyx addition.
+    if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_FONT_WEIGHT);
     // Two-page spread needs the Diptyx's second panel.
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_TWO_PAGE_SPREAD);
     // The right-screen sleep choice needs the Diptyx's second panel.

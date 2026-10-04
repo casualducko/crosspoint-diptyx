@@ -90,6 +90,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 51
+
+The header adds a `boldBody` flag (`bool`) after `wordSpacingPercent`. It participates in cache validation, so
+sections laid out with the body in the bold faces (Diptyx *Reader Font Weight*) are rebuilt when the setting changes.
+
 ### Version 50
 
 The header adds `paragraphIndentSpaces` after `extraParagraphSpacing`. The value

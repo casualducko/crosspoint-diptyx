@@ -307,6 +307,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.lineCompression = getReaderLineCompression();
   spec.characterSpacing = getCharacterSpacing();
   spec.wordSpacingPercent = wordSpacing;
+  spec.boldBody = BoardConfig::isDiptyx() && fontWeight == WEIGHT_BOLD;
   spec.extraParagraphSpacing = extraParagraphSpacing != 0;
   spec.paragraphIndentSpaces = paragraphIndentSpaces;
   spec.paragraphAlignment = paragraphAlignment;

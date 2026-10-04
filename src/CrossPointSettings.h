@@ -298,6 +298,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
+  // Diptyx only: Bold lays the body text out in the family's bold faces (bold words stay bold, italics become bold italic).
+  enum FONT_WEIGHT { WEIGHT_REGULAR = 0, WEIGHT_BOLD = 1, FONT_WEIGHT_COUNT };
+  uint8_t fontWeight = WEIGHT_REGULAR;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.

@@ -333,7 +333,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   }
 
   // Determine font style from depth-based tracking and CSS effective style
-  const bool isBold = boldUntilDepth < depth || effectiveBold;
+  const bool isBold = boldUntilDepth < depth || effectiveBold || boldBody;
   const bool isItalic = italicUntilDepth < depth || effectiveItalic;
 
   // Combine style flags using bitwise OR

@@ -24,4 +24,5 @@ struct ReaderRenderSpec {
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
+  bool boldBody = false;  // lay the whole text out in the bold faces (Diptyx Reader Font Weight = Bold)
 };
