@@ -146,9 +146,10 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
     y += 16;
     drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
   }
-  // The power button cannot wake a sleeping Diptyx; the page and center buttons do.
-  r.drawCenteredText(UI_10_FONT_ID, h - 70, tr(STR_WAKE_HINT_RIGHT_SLEEP));
 }
+
+// Set when the device is about to power off on battery (see RightPanel::setPoweringOff()).
+bool poweringOff = false;
 
 // A quiet sleep layout: the title in a serif face with the author below a short rule, on plain white, a little above
 // the vertical middle.
@@ -165,6 +166,10 @@ void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
     y += 22;
     drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
   }
+  // The power button cannot wake a sleeping Diptyx; the page and center buttons do. A powered-off one needs the power
+  // button instead.
+  const StrId hint = poweringOff ? StrId::STR_POWER_ON_HINT_RIGHT_SLEEP : StrId::STR_WAKE_HINT_RIGHT_SLEEP;
+  r.drawCenteredText(UI_10_FONT_ID, h - 70, I18N.get(hint));
 }
 
 // Makes sure the 1-bit conversion of the stock idle image is cached. False if there is no usable image. This decodes a
@@ -302,6 +307,8 @@ void forgetFrame() { storedValid = false; }
 }  // namespace detail
 
 void markDirty() { shownKey = 0; }
+
+void setPoweringOff(const bool off) { poweringOff = off; }
 
 void showSleepScreen(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;

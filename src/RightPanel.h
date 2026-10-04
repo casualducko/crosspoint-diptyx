@@ -36,6 +36,10 @@ void markDirty();
 // Always refreshes.
 void showSleepScreen(GfxRenderer& renderer, HalDisplay& display);
 
+// True when the device is about to switch fully off on battery: the sleep screen then says how to turn it on instead of
+// how to wake it (the page buttons cannot wake a powered-off Diptyx).
+void setPoweringOff(bool poweringOff);
+
 // Run `draw` into the shared framebuffer and show the result on the right panel with `mode`, leaving the left panel's
 // frame (and the framebuffer contents) as they were. Returns false if there was no memory to save the left frame.
 // By default the content is drawn in normal polarity (the sleep screen and idle image, like CrossPoint's own sleep

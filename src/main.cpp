@@ -34,6 +34,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "RightPanel.h"
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/Activity.h"
@@ -376,6 +377,8 @@ void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
+  // On battery a Diptyx power-off cuts the rail, so the right sleep screen must say how to turn it on, not wake it.
+  RightPanel::setPoweringOff(powerOff && BoardConfig::isDiptyx() && !gpio.isUsbConnected());
   activityManager.goToSleep(fromTimeout);
 
   if (isQuickResumeSleep) {
