@@ -117,7 +117,8 @@ the Diptyx. You need Wi-Fi and Libby.
 
 Only titles that offer *Read with...* work (not Kindle-only ones). The book stays protected and stops opening when the loan ends. The separate
 *Libby* plugin (library link, *Send to device*) connects and lists loans but fails on the book request, so skip it. The activation is kept on
-the card in `/plugins/protected-content/`; delete it if you stop using the plugin.
+the card in `/plugins/protected-content/`; delete it if you stop using the plugin. File Transfer has no password: anyone on the same
+network can open its page and download files from the card while it is on, so use it only on a network you trust and turn it off when you are done.
 
 ## Going back to stock
 
