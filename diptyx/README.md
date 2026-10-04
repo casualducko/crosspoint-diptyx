@@ -103,30 +103,20 @@ power button).
 
 ## Library books (Libby)
 
-CrossPoint can open library loans through SD-card plugins. On the Diptyx the working route is the manual one below. It is unofficial,
-it relies on third-party plugins and a third-party account service, and Libby or the plugins can change without notice.
+Unofficial: it uses third-party plugins and a third-party account service, and Libby or the plugins can change. Tested start to finish on
+the Diptyx. You need Wi-Fi, Libby, and a free [DTS ByteBooks](https://dtsbytebooks.com/register) account (separate from your library card;
+use an email and password you do not use elsewhere).
 
-What it needs: Wi-Fi, a library card with Libby, and a free account at [DTS ByteBooks](https://dtsbytebooks.com/register). The ByteBooks account
-only authorizes the reader to open protected books and is separate from your library card. Use an email and a password you do not use
-anywhere else.
+1. **Plugin Store:** download [`plugin-store.zip`](https://github.com/itsthisjustin/sd-plugins/releases/download/plugin-store/plugin-store.zip)
+   and unzip it at the SD card root. On the reader open *Settings > System > Plugins > Plugin Store* and install **Protected Content**.
+2. **Activate once:** start *File Transfer* in *Join Network* mode (not Hotspot), open the address it shows from your computer, and in the
+   *Protected Content* card enter the ByteBooks login and press *Activate device*.
+3. **Each book:** borrow it in Libby, open the loan, choose *Read with...* and download the `.acsm` file. Upload it to the card root in
+   *File Manager*, then in the plugin card press *Refresh files*, select it and press *Fetch selected book*. Open the EPUB from the file browser.
 
-1. **Install the plugins** from the [sd-plugins project](https://github.com/itsthisjustin/sd-plugins): put the Plugin Store on the SD card (its
-   folder goes in `/plugins/`), then install *Protected Content* from the store (*Settings > System > Plugins*). Tested on the Diptyx:
-   the Plugin Store loads its catalog and Protected Content runs; the plugin files were copied to the card by hand.
-2. **Start File Transfer** on the reader in *Join Network* mode (not Hotspot) and open the address it shows from your computer.
-3. **Activate once:** in the *Protected Content* card, enter the ByteBooks email and password and press *Activate device*.
-4. **Borrow in Libby** on your phone or computer. Open the loan, choose *Read with...* and download the `.acsm` file.
-5. **Upload the `.acsm` file** to the SD card root with *File Manager*, press *Refresh files* in the plugin card, select it and press
-   *Fetch selected book*. The book appears as an EPUB; open it from the reader's file browser.
-
-Good to know:
-
-- Only titles that offer *Read with...* work. A loan that Libby only offers through Kindle or its own web reader has no file to fetch.
-- The book stays protected on the card and stops opening when the loan ends.
-- The *Libby* plugin from another author (library link and a *Send to device* button) connected to Libby and listed loans on the Diptyx, but asking
-  for the book failed with an error from Libby (`missing_chip`), so use the manual steps for now.
-- Credentials are kept on the SD card in plain files (`/plugins/protected-content/` for the ByteBooks activation). Do not share the card
-  and delete those files if you stop using the plugins.
+Only titles that offer *Read with...* work (not Kindle-only ones). The book stays protected and stops opening when the loan ends. The separate
+*Libby* plugin (library link, *Send to device*) connects and lists loans but fails on the book request, so skip it. The activation is kept on
+the card in `/plugins/protected-content/`; delete it if you stop using the plugin.
 
 ## Going back to stock
 
