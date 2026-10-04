@@ -32,8 +32,8 @@ and the rumble motor are unused; no grayscale (the panels are black and white); 
 
 Flashing needs the chip's built-in bootloader:
 
-1. **Unplug USB first.** Hold the power button for 3 seconds until the screen says power off, then let go. With the cable plugged in, the Diptyx never fully turns off.
-2. **Wait until it is really off.** CrossPoint switches off at once, but the stock firmware can take several minutes. Press a page button: no buzz means it is off.
+1. **Unplug USB first.** Hold the power button for 3 seconds until the screen changes (the stock firmware says POWER OFF), then let go. With the cable plugged in, the Diptyx never fully turns off.
+2. **Wait until it is really off.** Give it at least 30 seconds. The stock firmware can take several minutes: press a page button, and if it buzzes, it is still on. With CrossPoint a page button should do nothing.
 3. **Press the center button straight in and keep holding it.**
 4. While holding it, plug in the USB-C cable, keep holding for about 5 seconds, then let go. The screens stay as they were; that is normal.
 
