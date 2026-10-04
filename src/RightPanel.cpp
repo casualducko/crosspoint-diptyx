@@ -7,6 +7,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -145,6 +146,8 @@ void drawBookCard(GfxRenderer& r, const BookCard& card) {
     y += 16;
     drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
   }
+  // The power button cannot wake a sleeping Diptyx; the page and center buttons do.
+  r.drawCenteredText(UI_10_FONT_ID, h - 70, tr(STR_WAKE_HINT_RIGHT_SLEEP));
 }
 
 // A quiet sleep layout: the title in a serif face with the author below a short rule, on plain white, a little above
