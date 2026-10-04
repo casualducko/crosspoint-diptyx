@@ -89,10 +89,12 @@ power button).
 | Center button press | Select / open the reader menu |
 | Right button (page-right) | Next / down (next page in a book) |
 | Center button up / down | Move up / down; in a book, previous / next page |
-| Power button | Hold: power off. Hold ~3 s when off: power on. |
+| Power button | Hold ~3 s: power off (on battery). After a power-off, wait about 20 seconds, then press it to turn on. It does not wake standby sleep. |
 
-- **Sleep:** it sleeps after the idle timeout (or from the menu) and any of the seven buttons wakes it. Holding the power button powers it off
-  completely; press and **hold** it for about 3 seconds to turn it on again (a quick tap is not enough).
+- **Sleep and power-off:** after the idle timeout (or from the menu) it goes into standby sleep, and the page buttons and the center button wake it;
+  the power button does not. Holding the power button for about 3 seconds powers it off completely (on battery; with the cable plugged in it
+  only goes to standby). After a power-off, wait about 20 seconds, then press the power button to turn it on; if a tap does nothing, hold it
+  for about 3 seconds.
 - **USB drive:** *File Transfer > USB Drive*, connect the cable, and the SD card appears on your computer. Eject it to return to the home screen.
 - **Idle images:** put `idle_screen_right.jpg` (about 480x648, portrait) on the SD card root for the right screen while asleep.
 - **Refresh:** a full screen flash happens every N page turns (*Settings > Reader > refresh frequency*, default 15). Lower it if you see ghosting.
