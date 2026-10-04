@@ -48,9 +48,9 @@ use option B.
 
 The page does the same safety checks as the script before it writes anything: it must be an ESP32-S3 with 16 MB of flash and the **stock
 Diptyx partition table**, or it refuses and changes nothing. It then downloads the firmware, checks its checksum and structure, writes
-**only the app slot** (0x10000), verifies the written data, and restarts the device. Under *Other options* you can **go back to the stock
-firmware** (downloaded from the makers' repository and checked against a known checksum) or install a firmware file of your own, and a
-button saves a copy of your current app first (about 3 minutes). Everything runs in your browser; the only download is the firmware.
+**only the app slot** (0x10000), verifies the written data, and restarts the device. A button next to the install button lets you **go back to the stock
+firmware** (downloaded from the makers' repository and checked against a known checksum), *Other options* lets you install a firmware file of
+your own, and a third button saves a copy of your current app first (about 3 minutes). Everything runs in your browser; the only download is the firmware.
 
 > The web flasher is newer than the script and has had less testing on real hardware, especially on Windows and Linux. If anything looks wrong,
 > the script (option B) gives more detail.
