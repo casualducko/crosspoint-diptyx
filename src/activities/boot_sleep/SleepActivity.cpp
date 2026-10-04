@@ -10,6 +10,7 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <JpegToBmpConverter.h>
 #include <Memory.h>
 #include <PNGdec.h>
 #include <Xtc.h>
@@ -45,6 +46,42 @@ constexpr char TRANSPARENT_SLEEP_DIR[] = "/.sleep-overlay";
 constexpr char TRANSPARENT_SLEEP_LEGACY_DIR[] = "/sleep-overlay";
 constexpr size_t MAX_SLEEP_FILE_NAME_LEN = 256;
 constexpr uint8_t MIN_VISIBLE_ALPHA = 8;
+
+// Diptyx: the stock firmware's left idle image. Converted once to a 1-bit BMP (same dither as the covers) and cached.
+constexpr char IDLE_LEFT_JPG[] = "/idle_screen_left.jpg";
+constexpr char IDLE_LEFT_BMP[] = "/.crosspoint/idle_left_bw.bmp";
+constexpr char IDLE_LEFT_KEY[] = "/.crosspoint/idle_left_bw.key";
+
+// True when a usable cached conversion of IDLE_LEFT_JPG exists afterwards. The cache follows the JPEG (size, time).
+bool ensureIdleLeftCache() {
+  if (!Storage.exists(IDLE_LEFT_JPG)) return false;
+  std::string jpgKey;
+  {
+    HalFile jpg;
+    if (!Storage.openFileForRead("SLP", IDLE_LEFT_JPG, jpg)) return false;
+    jpgKey = std::to_string(jpg.fileSize()) + ":" + std::to_string(jpg.modificationTime());
+  }
+  std::string cachedKey;
+  const bool haveKey = Storage.exists(IDLE_LEFT_KEY) && Storage.readFileToString("SLP", IDLE_LEFT_KEY, 96, cachedKey);
+  if (haveKey && cachedKey == jpgKey + ":bad") return false;  // a JPEG that failed to convert is not retried
+  if (haveKey && cachedKey == jpgKey && Storage.exists(IDLE_LEFT_BMP)) return true;
+  Storage.remove(IDLE_LEFT_KEY);
+  HalFile jpg;
+  HalFile bmp;
+  if (!Storage.openFileForRead("SLP", IDLE_LEFT_JPG, jpg) || !Storage.openFileForWrite("SLP", IDLE_LEFT_BMP, bmp)) {
+    return false;
+  }
+  const bool ok = JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(jpg, bmp, true);
+  bmp.close();
+  if (!ok) {
+    Storage.remove(IDLE_LEFT_BMP);
+    Storage.writeFile(IDLE_LEFT_KEY, String((jpgKey + ":bad").c_str()));
+    LOG_ERR("SLP", "Could not convert %s", IDLE_LEFT_JPG);
+    return false;
+  }
+  Storage.writeFile(IDLE_LEFT_KEY, String(jpgKey.c_str()));  // written last: a half-written cache is never trusted
+  return true;
+}
 
 struct BitmapPlacement {
   int x = 0;
@@ -576,6 +613,19 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
+  // Diptyx: honour the stock firmware's idle_screen_left.jpg before the CrossPoint sleep.bmp / sleep folder.
+  if (BoardConfig::isDiptyx() && ensureIdleLeftCache()) {
+    HalFile idleFile;
+    if (Storage.openFileForRead("SLP", IDLE_LEFT_BMP, idleFile)) {
+      Bitmap idle(idleFile);
+      if (idle.parseHeaders() == BmpReaderError::Ok) {
+        LOG_DBG("SLP", "Loading: %s", IDLE_LEFT_JPG);
+        renderBitmapSleepScreen(idle);
+        return;
+      }
+    }
+  }
+
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.

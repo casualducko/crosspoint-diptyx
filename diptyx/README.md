@@ -96,7 +96,9 @@ power button).
   only goes to standby). After a power-off, wait about 20 seconds, then press the power button to turn it on; if a tap does nothing, hold it
   for about 3 seconds.
 - **USB drive:** *File Transfer > USB Drive*, connect the cable, and the SD card appears on your computer. Eject it to return to the home screen.
-- **Idle images:** put `idle_screen_right.jpg` (about 480x648, portrait) on the SD card root for the right screen while asleep.
+- **Idle images (like the stock firmware):** put `idle_screen_left.jpg` and `idle_screen_right.jpg` (about 480x648, portrait) on the SD card root. The
+  left one is used when *Sleep Screen* is set to *Custom*; the right one when *Right Sleep Screen* is set to the idle image option (the default is Title &
+  Author). Each is converted once and cached; replace the file to change it.
 - **Refresh:** a full screen flash happens every N page turns (*Settings > Reader > refresh frequency*, default 15). Lower it if you see ghosting.
 
 ## Going back to stock
