@@ -289,7 +289,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
           uint8_t ditheredGray;
           if (useDithering) {
-            ditheredGray = applyBayerDither4Level(gray, outX, outY);
+            ditheredGray = applyPanelDither(gray, outX, outY);
           } else {
             ditheredGray = gray >> 6;
           }

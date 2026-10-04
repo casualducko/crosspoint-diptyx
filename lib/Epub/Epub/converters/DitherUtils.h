@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BitmapHelpers.h>
+#include <BoardConfig.h>
 #include <stdint.h>
 
 // 4x4 Bayer matrix for ordered dithering
@@ -24,4 +26,28 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   if (adjusted < 128) return 1;
   if (adjusted < 192) return 2;
   return 3;
+}
+
+// 8x8 Bayer matrix (0..63) for the 1-bit ordered dither below.
+inline const uint8_t bayer8x8[8][8] = {
+    { 0, 32,  8, 40,  2, 34, 10, 42},
+    {48, 16, 56, 24, 50, 18, 58, 26},
+    {12, 44,  4, 36, 14, 46,  6, 38},
+    {60, 28, 52, 20, 62, 30, 54, 22},
+    { 3, 35, 11, 43,  1, 33,  9, 41},
+    {51, 19, 59, 27, 49, 17, 57, 25},
+    {15, 47,  7, 39, 13, 45,  5, 37},
+    {63, 31, 55, 23, 61, 29, 53, 21},
+};
+
+// Black-and-white panel: tone-curve the gray, then threshold it against the Bayer matrix. Returns 0 (black) or
+// 3 (white), the only two levels the BW pass can show; the 4-level dither above would push every mid-gray to black.
+inline uint8_t applyBayerDither1Bit(uint8_t gray, int x, int y) {
+  const int threshold = bayer8x8[y & 7][x & 7] * 4 + 2;
+  return bwToneCurve(gray) >= threshold ? 3 : 0;
+}
+
+// The dither for the active panel: 1-bit on the Diptyx, 4 gray levels elsewhere.
+inline uint8_t applyPanelDither(uint8_t gray, int x, int y) {
+  return BoardConfig::isDiptyx() ? applyBayerDither1Bit(gray, x, y) : applyBayerDither4Level(gray, x, y);
 }

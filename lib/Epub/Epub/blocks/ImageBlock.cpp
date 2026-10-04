@@ -1,5 +1,6 @@
 #include "ImageBlock.h"
 
+#include <BoardConfig.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
@@ -34,12 +35,14 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 namespace {
 
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache)
+  // Replace extension with .pxc (pixel cache); the Diptyx caches its 1-bit dither as .pxb so older 4-level caches are
+  // not reused
+  const char* ext = BoardConfig::isDiptyx() ? ".pxb" : ".pxc";
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".pxc";
+    return imagePath.substr(0, dotPos) + ext;
   }
-  return imagePath + ".pxc";
+  return imagePath + ext;
 }
 
 bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
