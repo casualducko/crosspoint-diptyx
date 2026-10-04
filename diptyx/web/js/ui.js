@@ -75,9 +75,17 @@ function fail(err) {
   showResult('fail', title, [hint, 'Nothing else on your device was changed outside the app slot. The technical log below has details.']);
 }
 
+// The Connect button is the blue call to action only until the Diptyx is connected; then the Install button below it takes over.
+function setConnected(on) {
+  const btn = $('connect');
+  btn.classList.toggle('primary', !on);
+  btn.textContent = on ? 'Connected \u2713' : 'Connect to my Diptyx';
+}
+
 async function closeDriver() {
   if (driver) { try { await driver.disconnect(); } catch { /* ignore */ } driver = null; }
   $('actions').hidden = true;
+  setConnected(false);
 }
 
 function setChecks(items) {
@@ -103,6 +111,7 @@ async function onConnect() {
       ['ok', `Flash: ${info.flash / 1048576} MB`],
       ['ok', 'Partition table: stock Diptyx layout'],
     ]);
+    setConnected(true);
     $('actions').hidden = false;
     $('actions').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
