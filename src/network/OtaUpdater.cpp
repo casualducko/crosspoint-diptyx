@@ -11,6 +11,8 @@
 #include <esp_ota_ops.h>
 // clang-format on
 
+#include <BoardConfig.h>
+
 #include <algorithm>
 #include <cstring>
 #include <string>
@@ -20,9 +22,54 @@
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+
+// Diptyx: the web flasher's manifest names the latest release ("1.6.5-2"). The Diptyx has one app slot and no OTA slot,
+// so the device only reports a newer release; installing it is done with the web flasher.
+constexpr char diptyxManifestUrl[] = "https://casualducko.github.io/crosspoint-diptyx/manifest.json";
+#ifndef DIPTYX_RELEASE
+#define DIPTYX_RELEASE "dev"  // the release workflow sets this to the tag's version
+#endif
+
+// Parses "major.minor.patch-build"; false if the text does not have that shape.
+bool parseDiptyxRelease(const char* text, int out[4]) {
+  return text && sscanf(text, "%d.%d.%d-%d", &out[0], &out[1], &out[2], &out[3]) == 4;
+}
+
+// Pulls the "version" string out of the manifest JSON (a flat object written by the release workflow).
+bool parseManifestVersion(const std::string& json, std::string& version) {
+  const size_t key = json.find("\"version\"");
+  if (key == std::string::npos) return false;
+  const size_t open = json.find('"', json.find(':', key) + 1);
+  if (open == std::string::npos) return false;
+  const size_t close = json.find('"', open + 1);
+  if (close == std::string::npos || close - open > 24) return false;
+  version = json.substr(open + 1, close - open - 1);
+  return true;
+}
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
+  if (BoardConfig::isDiptyx()) {
+    LOG_DBG("OTA", "Checking for update (current: %s)", DIPTYX_RELEASE);
+    std::string body;
+    body.reserve(512);
+    const bool fetched = HttpDownloader::fetchUrl(diptyxManifestUrl, [&](const uint8_t* data, size_t len) {
+      if (body.size() + len > 2048) return false;  // the manifest is a few hundred bytes
+      body.append(reinterpret_cast<const char*>(data), len);
+      return true;
+    });
+    if (!fetched) {
+      LOG_ERR("OTA", "Manifest fetch failed");
+      return HTTP_ERROR;
+    }
+    if (!parseManifestVersion(body, latestVersion)) {
+      LOG_ERR("OTA", "No version in the manifest");
+      return JSON_PARSE_ERROR;
+    }
+    updateAvailable = true;
+    return OK;
+  }
+
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
   // Stream the ~32KB release JSON straight into the parser as it arrives.
@@ -91,7 +138,21 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   return OK;
 }
 
+const char* OtaUpdater::currentVersion() { return BoardConfig::isDiptyx() ? DIPTYX_RELEASE : CROSSPOINT_VERSION; }
+
 bool OtaUpdater::isUpdateNewer() const {
+  if (BoardConfig::isDiptyx()) {
+    int latest[4];
+    int current[4];
+    if (!updateAvailable || !parseDiptyxRelease(latestVersion.c_str(), latest)) return false;
+    // A build that does not carry a release number (a development build) counts as older than any release.
+    if (!parseDiptyxRelease(DIPTYX_RELEASE, current)) return true;
+    for (int i = 0; i < 4; i++) {
+      if (latest[i] != current[i]) return latest[i] > current[i];
+    }
+    return false;
+  }
+
   if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
     return false;
   }

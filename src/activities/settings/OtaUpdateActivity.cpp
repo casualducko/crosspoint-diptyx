@@ -1,5 +1,6 @@
 #include "OtaUpdateActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <WiFi.h>
@@ -52,6 +53,16 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
       RenderLock lock(*this);
       state = NO_UPDATE;
     }
+    return;
+  }
+
+  if (BoardConfig::isDiptyx()) {
+    // No second app slot to install into: tell the user where to get the new release.
+    {
+      RenderLock lock(*this);
+      state = UPDATE_ON_COMPUTER;
+    }
+    requestUpdate();
     return;
   }
 
@@ -133,6 +144,23 @@ void OtaUpdateActivity::render(RenderLock&&) {
                       (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
     if (confirmPopup.processRender(renderer, mappedInput)) return;
+  } else if (state == UPDATE_ON_COMPUTER) {
+    const int infoTop = pageHeight / 6;
+    const int line = height + metrics.verticalSpacing;
+    renderer.drawCenteredText(UI_10_FONT_ID, infoTop, tr(STR_NEW_UPDATE), true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop + 2 * line,
+                      (std::string(tr(STR_CURRENT_VERSION)) + OtaUpdater::currentVersion()).c_str());
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop + 3 * line,
+                      (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
+    const int hintY = infoTop + 5 * line;
+    const Rect hintBounds{metrics.contentSidePadding, hintY, pageWidth - metrics.contentSidePadding * 2,
+                          pageHeight - hintY};
+    UITheme::drawCenteredWrappedText(renderer, hintBounds, UI_10_FONT_ID, tr(STR_UPDATE_ON_COMPUTER), 3, true,
+                                     EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
+    renderer.drawCenteredText(UI_10_FONT_ID, hintY + 4 * line, "casualducko.github.io/crosspoint-diptyx", true,
+                              EpdFontFamily::BOLD);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == UPDATE_IN_PROGRESS) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING));
 
@@ -229,7 +257,7 @@ void OtaUpdateActivity::loop() {
     return;
   }
 
-  if (state == NO_UPDATE) {
+  if (state == NO_UPDATE || state == UPDATE_ON_COMPUTER) {
     int x = 0;
     int y = 0;
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {

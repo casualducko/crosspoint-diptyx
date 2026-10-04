@@ -9,6 +9,7 @@ class OtaUpdateActivity : public Activity {
     WIFI_SELECTION,
     CHECKING_FOR_UPDATE,
     WAITING_CONFIRMATION,
+    UPDATE_ON_COMPUTER,  // Diptyx: a newer release exists; it is installed with the web flasher
     UPDATE_IN_PROGRESS,
     NO_UPDATE,
     FAILED,

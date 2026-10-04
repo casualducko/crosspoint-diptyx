@@ -45,7 +45,13 @@ jobs:
           pio pkg install -e diptyx
           uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
       - name: Build
-        run: pio run -e diptyx
+        run: |
+          set -euo pipefail
+          # The firmware's update check compares this with the web flasher's manifest ("1.6.5-2"); other runs build "dev".
+          ver="dev"
+          [ "$GITHUB_REF_TYPE" = "tag" ] && ver="${GITHUB_REF_NAME#diptyx-v}"
+          export PLATFORMIO_BUILD_FLAGS="-DDIPTYX_RELEASE=\\\"${ver}\\\""
+          pio run -e diptyx
       - name: Web flasher tests
         run: node --test diptyx/web/test/*.test.mjs
         env:
