@@ -601,7 +601,15 @@ void setup() {
   }
 
   HalSystem::checkPanic();
-  if (BoardConfig::isDiptyx()) firstBootOfThisBuild = recordBuildBoot();
+  if (BoardConfig::isDiptyx()) {
+    firstBootOfThisBuild = recordBuildBoot();
+    // Diagnostic for post-flash behavior: the boot facts, kept on the SD card.
+    char reason[96];
+    snprintf(reason, sizeof(reason), "reset=%d cause=%d wake=%d usb=%d first=%d", static_cast<int>(esp_reset_reason()),
+             static_cast<int>(esp_sleep_get_wakeup_cause()), static_cast<int>(wakeupReason),
+             gpio.isUsbConnected() ? 1 : 0, firstBootOfThisBuild ? 1 : 0);
+    Storage.writeFile("/.crosspoint/last_boot_reason", String(reason));
+  }
 
   APP_STATE.loadFromFile();
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;

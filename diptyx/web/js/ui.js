@@ -135,9 +135,13 @@ async function run(title, phaseIds, job, doneTitle, doneLines) {
 }
 
 const AFTER = [
-  'The Diptyx restarts by itself and shows the CrossPoint home screen within about 20 seconds.',
+  'The Diptyx restarts and shows the CrossPoint home screen within about 20 seconds.',
+  'If the screens stay unchanged, press the left page button to wake it.',
 ];
-const AFTER_OWN = ['The Diptyx restarts by itself within about 20 seconds.'];
+const AFTER_OWN = [
+  'The Diptyx restarts within about 20 seconds.',
+  'If the screens stay unchanged, press the left page button to wake it.',
+];
 const AFTER_STOCK = [
   'The Diptyx restarts by itself into the stock firmware in a few seconds. Your settings and books are untouched.',
   "Note: If your device gets stuck with POWER OFF written on the screen, make sure it's unplugged from power, wait 20 seconds, then press the power button again.",
