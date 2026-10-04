@@ -404,17 +404,17 @@ void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
     WiFi.mode(WIFI_OFF);
   }
 
-  halTiltSensor.deepSleep();
-  display.deepSleep();
-  Storage.prepareForDeepSleep();
-  LOG_DBG("MAIN", "Entering deep sleep");
-
   if (BoardConfig::isDiptyx()) {
     char note[64];
     snprintf(note, sizeof(note), "sleep powerOff=%d timeout=%d usb=%d", powerOff ? 1 : 0, fromTimeout ? 1 : 0,
              gpio.isUsbConnected() ? 1 : 0);
     noteBoot(note);
   }
+  halTiltSensor.deepSleep();
+  display.deepSleep();
+  Storage.prepareForDeepSleep();
+  LOG_DBG("MAIN", "Entering deep sleep");
+
   powerManager.startDeepSleep(gpio, powerOff);
 }
 

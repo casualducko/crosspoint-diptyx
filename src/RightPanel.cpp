@@ -166,10 +166,9 @@ void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
     y += 22;
     drawCentered(r, UI_10_FONT_ID, card.author, y, 2, textWidth);
   }
-  // The power button cannot wake a sleeping Diptyx; the page and center buttons do. A powered-off one needs the power
-  // button instead.
-  const StrId hint = poweringOff ? StrId::STR_POWER_ON_HINT_RIGHT_SLEEP : StrId::STR_WAKE_HINT_RIGHT_SLEEP;
-  r.drawCenteredText(UI_10_FONT_ID, h - 70, I18N.get(hint));
+  // The power button cannot wake a sleeping Diptyx; the page and center buttons do. After a power-off none of them
+  // can, so the hint is left out.
+  if (!poweringOff) r.drawCenteredText(UI_10_FONT_ID, h - 70, I18N.get(StrId::STR_WAKE_HINT_RIGHT_SLEEP));
 }
 
 // Makes sure the 1-bit conversion of the stock idle image is cached. False if there is no usable image. This decodes a
