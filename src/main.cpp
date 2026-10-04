@@ -365,7 +365,7 @@ void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
 
   const bool isQuickResumeSleep =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
+      (fromTimeout && !BoardConfig::isDiptyx() &&  // the Diptyx hides Quick Resume on Timeout
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
   // Every sleep mode leaves a complete retained frame on the e-ink panel. Keep
   // it visible until the first useful reader or home paint replaces it.

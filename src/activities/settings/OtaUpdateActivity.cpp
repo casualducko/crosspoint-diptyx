@@ -157,7 +157,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
                           pageHeight - hintY};
     UITheme::drawCenteredWrappedText(renderer, hintBounds, UI_10_FONT_ID, tr(STR_UPDATE_ON_COMPUTER), 3, true,
                                      EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
-    renderer.drawCenteredText(UI_10_FONT_ID, hintY + 4 * line, "casualducko.github.io/crosspoint-diptyx", true,
+    renderer.drawCenteredText(UI_10_FONT_ID, hintY + 3 * line, "casualducko.github.io/crosspoint-diptyx", true,
                               EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
