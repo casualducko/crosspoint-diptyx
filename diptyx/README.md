@@ -17,6 +17,18 @@ project. Use it at your own risk; you can always go back to the stock firmware (
 - Black-and-white rendering tuned for the Diptyx panels, standby and real power-off, battery level, USB mass storage (use the SD card
   like a USB drive).
 
+### More fonts
+
+Only two reading fonts are built into the firmware: **Literata Mono** and **Noto Sans** (the app slot is nearly full, and a font family
+takes several MB). Many more are an optional download that lives on the SD card, so they cost no flash and you can add or remove them
+whenever you like:
+
+- **On the device:** *Settings > Reader > Manage Fonts* downloads the Diptyx [font pack](fonts/README.md) over Wi-Fi: ten mono-hinted
+  families (Literata Mono, Source Serif 4, Spectral, Bitter, ChareInk, Crimson Pro, Atkinson Hyperlegible Next, Inter, Noto Sans and a dyslexia-friendly
+  face) at 10 to 18 pt. Pick one in *Settings > Reader > Text Settings > Font*.
+- **From a computer:** copy a family folder from the font pack into `/fonts/` on the SD card (see [fonts/README.md](fonts/README.md)).
+- **Bold Text** (*Text Settings > Style*) sets the whole body in the family's bold face.
+
 Not there yet: OPDS is **untested** on the Diptyx (Wi-Fi file transfer and SD-card plugins have been tried, see below); TXT/XTC books have no two-page spread; footnote and link
 selection works on the left page of a spread only; the status LED
 and the rumble motor are unused; no grayscale (the panels are black and white); no over-the-air updates (reflash with the steps below).
