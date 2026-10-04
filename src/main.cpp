@@ -23,6 +23,7 @@
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
 #include <driver/gpio.h>
+#include <esp_app_desc.h>
 #include <esp_system.h>
 
 #include <cstring>
@@ -516,6 +517,20 @@ static void powerFailsafeTask(void*) {
   }
 }
 
+// Diptyx: true when this boot is the first one of the running firmware build. The build's ELF hash is kept in a
+// small SD file; a different (or missing) hash means the device was just flashed.
+static bool firstBootOfThisBuild = false;
+
+static bool recordBuildBoot() {
+  constexpr const char* kBuildFile = "/.crosspoint/last_boot_build";
+  char build[17] = {};
+  if (esp_app_get_elf_sha256(build, sizeof(build)) <= 0) return false;
+  if (Storage.readFile(kBuildFile) == build) return false;
+  Storage.ensureDirectoryExists("/.crosspoint");
+  Storage.writeFile(kBuildFile, build);
+  return true;
+}
+
 void setup() {
   BoardConfig::holdPowerRails();
   if (BoardConfig::isDiptyx()) {
@@ -586,6 +601,7 @@ void setup() {
   }
 
   HalSystem::checkPanic();
+  if (BoardConfig::isDiptyx()) firstBootOfThisBuild = recordBuildBoot();
 
   APP_STATE.loadFromFile();
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
@@ -643,17 +659,18 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // Most devices return to sleep after a USB-powered cold boot.
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4 || \
-    FREEINK_DEVICE_DIPTYX
+#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4
       // X4 Pro must stay awake so USB Serial/JTAG remains available after leaving
       // USB Drive and reconnecting the cable. Paper Mono has no armable GPIO wake
       // (its button is behind the PMIC). EEGO A4's post-flash reset reads as
       // POWERON (native-USB), so a flash would otherwise be misclassified as a
       // USB-power cold boot and sleep. Sleeping any of these here would strand
-      // the device in a USB-replug boot loop (or sleep right after a flash). The Diptyx stays awake so a
-      // freshly flashed device starts by itself.
+      // the device in a USB-replug boot loop (or sleep right after a flash).
       break;
 #else
+      // The Diptyx stays awake on the first boot of a newly flashed build, so a fresh flash starts by itself;
+      // plugging a cable into an off device still just charges.
+      if (firstBootOfThisBuild) break;
       Storage.prepareForDeepSleep();
       powerManager.startDeepSleep(gpio);
       break;
