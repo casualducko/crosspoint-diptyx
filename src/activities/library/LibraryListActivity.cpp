@@ -1,6 +1,7 @@
 #include "LibraryListActivity.h"
 
 #include <FreeInkUIIcon.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -11,6 +12,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
@@ -25,6 +27,7 @@
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/MarkAsRead.h"
 
 namespace fui = freeink::ui;
 
@@ -272,33 +275,40 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     }
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  // The menu is built from what applies to this row; the callback maps a choice back to its action.
+  enum class Action : uint8_t { Open, RemoveRecent, MarkRead, Delete, Rebuild };
+  const char* labels[5];
+  std::array<Action, 5> actions{};
+  int optionCount = 0;
+  const auto addOption = [&](const char* label, const Action action) {
+    labels[optionCount] = label;
+    actions[static_cast<size_t>(optionCount++)] = action;
+  };
+  addOption(tr(STR_OPEN), Action::Open);
+  if (isStoreRow) addOption(tr(STR_REMOVE_FROM_RECENTS), Action::RemoveRecent);
+  if (FsHelpers::hasEpubExtension(path)) addOption(tr(STR_MARK_AS_READ), Action::MarkRead);
+  addOption(tr(STR_DELETE), Action::Delete);
+  addOption(tr(STR_LIBRARY_REBUILD), Action::Rebuild);
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
-                   [this, path, title, isStoreRow](const int choice) {
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), labels, optionCount, 0,
+                   [this, path, title, actions, optionCount](const int choice) {
                      swallowHeldReleases();
-                     switch (choice) {
-                       case 0:
+                     if (choice < 0 || choice >= optionCount) return;
+                     switch (actions[static_cast<size_t>(choice)]) {
+                       case Action::Open:
                          openBookByPath(path);
                          break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
+                       case Action::RemoveRecent:
+                         promptRemoveRecentBook(path, title);
                          break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
+                       case Action::MarkRead:
+                         promptMarkAsRead(path, title);
                          break;
-                       case 3:
-                         if (isStoreRow) promptRebuildIndex();
+                       case Action::Delete:
+                         promptDeleteBookByPath(path, title);
                          break;
-                       default:
+                       case Action::Rebuild:
+                         promptRebuildIndex();
                          break;
                      }
                    });
@@ -348,6 +358,41 @@ void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const 
     if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
     if (!result.isCancelled && RECENT_BOOKS.removeByPath(path)) {
       resolvePinned();
+      closeRouting();
+      auto& nav = activeNav();
+      const int count = listCount();
+      if (count == 0) {
+        nav.selected = 0;
+      } else if (nav.selected > count) {
+        nav.selected = count;
+      }
+      nav.followOnBuild = true;
+    }
+  });
+}
+
+void LibraryListActivity::promptMarkAsRead(const std::string& path, const std::string& title) {
+  const bool reopenIndex = index.isOpen();
+  index.close();
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_MARK_AS_READ), title);
+  if (!confirmation) {
+    LOG_ERR("LIB", "OOM: mark as read confirmation");
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    return;
+  }
+
+  startActivityForResult(std::move(confirmation), [this, path, reopenIndex](const ActivityResult& result) {
+    swallowHeldReleases();
+    MarkAsReadResult marked;
+    if (!result.isCancelled) marked = markBookAsRead(path);
+    if (marked.moved) {
+      // The file now lives in /read: the index has to be rebuilt (this reopens it).
+      promptRebuildIndex();
+      return;
+    }
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    if (marked.ok) {
+      resolvePinned();  // the book may have left Recents
       closeRouting();
       auto& nav = activeNav();
       const int count = listCount();
