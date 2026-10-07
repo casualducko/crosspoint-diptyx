@@ -174,36 +174,51 @@ bool ensureIdleCache(const GfxRenderer& r) {
                                     r.getScreenHeight());
 }
 
-// Draws a cached 1-bit bitmap (idle image or cover) placed as the image fit says. False if it cannot be read.
+// Draws a cached 1-bit bitmap (idle image or cover) placed as the image fit says. False if it cannot be read. The
+// screen is cleared first either way: present() parks a copy of the left frame in the framebuffer, and a failed read
+// must not leave that on the right panel.
 bool drawBitmapFile(GfxRenderer& r, const char* path) {
+  r.clearScreen();
   HalFile file;
   if (!Storage.openFileForRead("RP", path, file)) return false;
   Bitmap bitmap(file);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;
-  r.clearScreen();
   const auto p = idleimage::place(bitmap.getWidth(), bitmap.getHeight(), r.getScreenWidth(), r.getScreenHeight(),
                                   SETTINGS.rightImageFit == CrossPointSettings::CROP);
   return r.drawBitmap(bitmap, p.x, p.y, r.getScreenWidth(), r.getScreenHeight(), p.cropX, p.cropY);
 }
 
-// The current book's cover as a 1-bit BMP placed as the image fit says; empty when there is no book or no cover. This
-// decodes the cover, so it runs before present() like ensureIdleCache().
+// True when path is a readable BMP; a cover left half-written by a power loss is deleted so it is made again.
+bool usableCoverBmp(const std::string& path) {
+  {
+    HalFile file;
+    if (Storage.openFileForRead("RP", path, file)) {
+      Bitmap bitmap(file);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) return true;
+    }
+  }
+  Storage.remove(path.c_str());
+  return false;
+}
+
+// The current book's cover as a 1-bit BMP placed as the image fit says; empty when there is no book or no cover, or the
+// cached file cannot be read. This decodes the cover, so it runs before present() like ensureIdleCache().
 std::string sleepCoverBmpPath() {
   if (APP_STATE.openEpubPath.empty()) return "";
   const uint8_t fit = SETTINGS.rightImageFit;
   const bool cropped = fit == CrossPointSettings::CROP;
   const bool stretched = fit == CrossPointSettings::STRETCH;
+  std::string path;
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
     Xtc book(APP_STATE.openEpubPath, "/.crosspoint");
-    if (!book.load() || !book.generateCoverBmp()) return "";
-    return book.getCoverBmpPath();
-  }
-  if (FsHelpers::hasReflowableBookExtension(APP_STATE.openEpubPath)) {
+    if (book.load() && book.generateCoverBmp()) path = book.getCoverBmpPath();
+  } else if (FsHelpers::hasReflowableBookExtension(APP_STATE.openEpubPath)) {
     Epub book(APP_STATE.openEpubPath, "/.crosspoint");
-    if (!book.load(true, true) || !book.generateCoverBmp(cropped, false, stretched)) return "";
-    return book.getCoverBmpPath(cropped, false, stretched);
+    if (book.load(true, true) && book.generateCoverBmp(cropped, false, stretched)) {
+      path = book.getCoverBmpPath(cropped, false, stretched);
+    }
   }
-  return "";
+  return !path.empty() && usableCoverBmp(path) ? path : std::string();
 }
 
 // Dark, Light and Blank: the logo on black or white, or nothing at all.

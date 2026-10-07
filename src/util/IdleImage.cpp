@@ -30,14 +30,16 @@ bool ensureConverted(const char* tag, const char* jpgPath, const char* bmpPath, 
   HalFile jpg;
   HalFile bmp;
   if (!Storage.openFileForRead(tag, jpgPath, jpg) || !Storage.openFileForWrite(tag, bmpPath, bmp)) return false;
+  // The decoder needs a lot of heap: a failure with little free is not a verdict on the file, so it is retried next time.
+  const bool lowHeap = ESP.getFreeHeap() < 128 * 1024;
   const bool crop = fit == CrossPointSettings::CROP;
   const bool stretch = fit == CrossPointSettings::STRETCH;
   const bool ok = JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(jpg, bmp, crop, stretch);
   bmp.close();
   if (!ok) {
     Storage.remove(bmpPath);
-    Storage.writeFile(keyPath, String((jpgKey + ":bad").c_str()));
-    LOG_ERR(tag, "Could not convert %s", jpgPath);
+    if (!lowHeap) Storage.writeFile(keyPath, String((jpgKey + ":bad").c_str()));
+    LOG_ERR(tag, "Could not convert %s%s", jpgPath, lowHeap ? " (low heap, will retry)" : "");
     return false;
   }
   Storage.writeFile(keyPath, String(jpgKey.c_str()));  // written last: a half-written cache is never trusted

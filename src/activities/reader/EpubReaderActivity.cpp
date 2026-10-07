@@ -1539,7 +1539,11 @@ void EpubReaderActivity::renderBook() {
   updateBookmarkFlag();
 
   {
-    auto p = section->loadPage(section->currentPage);
+    // The page drawn on the left panel: the position page, or right to left the page after it (blank when the chapter
+    // ends on an odd page). Loading it here puts a failed read through the same retry handling as any page.
+    const int leftIndex = leftPageIndex();
+    auto p = leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex)
+                                                              : makeUniqueNoThrow<Page>();
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       automaticPageTurnActive = false;
@@ -1562,18 +1566,11 @@ void EpubReaderActivity::renderBook() {
     }
     pageLoadRetryCount = 0;
 
-    currentPageVisibleOffset = p->visibleTextOffset;
+    // The saved position is the position page's, which right to left is not the page on this panel.
     if (spreadRtl()) {
-      // Right to left, the position page goes to the right panel (renderSpreadRightPage); this panel draws the page
-      // after it, or stays blank when the chapter ends on an odd page.
-      const int leftIndex = leftPageIndex();
-      p = leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex) : nullptr;
-      if (!p) p = makeUniqueNoThrow<Page>();
-      if (!p) {
-        LOG_ERR("ERS", "OOM: blank left page");
-        requestUpdate();
-        return;
-      }
+      currentPageVisibleOffset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(section->currentPage));
+    } else {
+      currentPageVisibleOffset = p->visibleTextOffset;
     }
     currentPageFootnotes = std::move(p->footnotes);
     currentPageLinks = std::move(p->links);
@@ -1985,7 +1982,8 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   for (const uint32_t v : {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n),
                            static_cast<uint32_t>(pageExists), static_cast<uint32_t>(section->pageCount),
                            static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin),
-                           static_cast<uint32_t>(spreadRtl())}) {
+                           static_cast<uint32_t>(spreadRtl()),
+                           static_cast<uint32_t>(spreadRtl() && currentPageBookmarked)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
@@ -2171,6 +2169,9 @@ void EpubReaderActivity::discardOverlayPage() {
 
 bool EpubReaderActivity::showBookmarkPopupOnly() {
   if (!BoardConfig::isDiptyx() || !section || overlay != Overlay::None || overlayPageStored) return false;
+  // Right to left the bookmark icon is on the right panel, which a popup over the left frame never redraws: take the
+  // full render instead.
+  if (spreadRtl()) return false;
   RenderLock lock;
   if (!renderer.storeBwBuffer()) return false;
   overlayPageStored = true;
