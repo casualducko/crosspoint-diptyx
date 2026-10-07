@@ -45,7 +45,12 @@ uint16_t getSdCardSpaceAdvance(SdCardFont& font, const EpdFontFamily::Style styl
 }  // namespace
 
 namespace {
-const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir);
+const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir,
+                              bool spellLetterlike);
+
+// The font ranges stop short of the Letterlike Symbols block (U+2100-214F), so ™ and its relatives would draw as the
+// replacement glyph. The font that will draw the text decides whether to spell them out.
+bool fontLacksLetterlike(const EpdFontFamily& family, EpdFontFamily::Style style);
 
 // Appends the shaped visual form of every RTL token in `text` to `shapedOut`.
 // getTextAdvanceX() measures the bidi-reordered, Arabic-shaped codepoint stream,
@@ -658,7 +663,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   }
 
   std::string visual;
-  const char* renderedText = resolveVisualText(text, visual, baseDir);
+  const char* renderedText = resolveVisualText(text, visual, baseDir, fontLacksLetterlike(fontIt->second, style));
 
   // Redirected to the SD fallback: batch-load the string's glyphs so the
   // per-codepoint measurement loop below doesn't fault them in one SD read
@@ -691,7 +696,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
 
   std::string visual;
-  const char* renderedText = resolveVisualText(text, visual, baseDir);
+  const auto spellFontIt = fontMap.find(resolvedFontId);
+  const char* renderedText = resolveVisualText(
+      text, visual, baseDir, spellFontIt != fontMap.end() && fontLacksLetterlike(spellFontIt->second, style));
 
   // Baseline from the resolved font; when the string was redirected to the
   // fallback, the caller positioned this line with the REQUESTED font's
@@ -784,8 +791,64 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 }
 
 namespace {
-const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
+bool fontLacksLetterlike(const EpdFontFamily& family, const EpdFontFamily::Style style) {
+  return !family.hasCodepoint(0x2122, style);  // the block is all-or-nothing in the fonts we ship
+}
+
+// Spelled-out forms of the letterlike signs books use, as plain text writes them.
+const char* letterlikeSpelling(const uint32_t cp) {
+  switch (cp) {
+    case 0x2120: return "SM";    // service mark
+    case 0x2122: return "TM";    // trade mark
+    case 0x2116: return "No";    // numero
+    case 0x2103: return "\xC2\xB0" "C";  // degree Celsius
+    case 0x2109: return "\xC2\xB0" "F";  // degree Fahrenheit
+    default: return nullptr;
+  }
+}
+
+// UTF-8 for U+2103, U+2109, U+2116, U+2120 and U+2122 all start E2 84: a cheap test before decoding anything.
+bool mayContainLetterlike(const char* text) {
+  for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); p[0] && p[1]; ++p) {
+    if (p[0] == 0xE2 && p[1] == 0x84) return true;
+  }
+  return false;
+}
+
+std::string spellLetterlikeSigns(const char* text) {
+  std::string out;
+  const auto* p = reinterpret_cast<const uint8_t*>(text);
+  while (*p) {
+    const uint8_t* start = p;
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (cp == 0) break;
+    if (const char* spelled = (cp >= 0x2100 && cp <= 0x214F) ? letterlikeSpelling(cp) : nullptr) {
+      out += spelled;
+    } else {
+      out.append(reinterpret_cast<const char*>(start), static_cast<size_t>(p - start));
+    }
+  }
+  return out;
+}
+
+const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir,
+                              const bool spellLetterlike) {
   if (!text || *text == '\0') return text;
+
+  // Substitute before bidi so the signs sit inside their words; the result has to live in visualBuffer, because the
+  // bidi step below writes there too.
+  std::string spelled;
+  if (spellLetterlike && mayContainLetterlike(text)) {
+    spelled = spellLetterlikeSigns(text);
+    text = spelled.c_str();
+  }
+  const auto keep = [&](const char* unchanged) -> const char* {
+    if (unchanged == spelled.c_str() && !spelled.empty()) {
+      visualBuffer = spelled;
+      return visualBuffer.c_str();
+    }
+    return unchanged;
+  };
 
   if (baseDir != BidiUtils::BidiBaseDir::RTL) {
     // Byte-level scan: skip BiDi when no RTL script lead bytes are present.
@@ -799,13 +862,13 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
         break;
       }
     }
-    if (!hasRtlBytes) return text;
+    if (!hasRtlBytes) return keep(text);
   }
 
   if (BidiUtils::applyBidiVisual(text, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
     return visualBuffer.c_str();
   }
-  return text;
+  return keep(text);
 }
 }  // namespace
 
@@ -2104,7 +2167,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   // lines come out wider than they draw — uneven word gaps and a ragged
   // right margin.
   std::string visual;
-  text = resolveVisualText(text, visual, baseDir);
+  const auto spellFontIt = fontMap.find(resolvedFontId);
+  text = resolveVisualText(text, visual, baseDir,
+                           spellFontIt != fontMap.end() && fontLacksLetterlike(spellFontIt->second, style));
 
   // Advance table fast-path for SD card fonts during layout.
   // No kerning/ligature lookup — consistent with previous metadataOnly behavior
