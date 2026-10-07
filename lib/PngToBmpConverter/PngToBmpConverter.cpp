@@ -401,7 +401,8 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop, bool originalThresholds, bool toneForBw) {
+                                                   bool oneBit, bool crop, bool originalThresholds, bool toneForBw,
+                                                   bool stretch) {
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature
@@ -590,6 +591,10 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     outHeight = static_cast<int>(height * scale);
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
+    if (stretch) {  // fill the target exactly, each axis scaled on its own
+      outWidth = targetWidth;
+      outHeight = targetHeight;
+    }
 
     scaleX_fp = (width << 16) / outWidth;
     scaleY_fp = (height << 16) / outHeight;
@@ -827,10 +832,10 @@ bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool
 }
 
 // Cover for a black-and-white-only panel (the Diptyx)
-bool PngToBmpConverter::pngFileTo1BitCoverBmpStream(HalFile& pngFile, Print& bmpOut, bool crop) {
+bool PngToBmpConverter::pngFileTo1BitCoverBmpStream(HalFile& pngFile, Print& bmpOut, bool crop, bool stretch) {
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, true, crop, false, true);
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, true, crop, false, true, stretch);
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,

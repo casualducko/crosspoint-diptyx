@@ -108,9 +108,12 @@ power button).
   only goes to standby). After a power-off, wait about 20 seconds, then press the power button to turn it on; if a tap does nothing, hold it
   for about 3 seconds.
 - **USB drive:** *File Transfer > USB Drive*, connect the cable, and the SD card appears on your computer. Eject it to return to the home screen.
+- **Sleep screens (Settings > Display):** each screen has its own. *Left Sleep Screen* offers Dark, Light, Custom, Cover and more; *Right Sleep Screen*
+  offers Idle Image, Title & Author, Cover, Dark, Light and None. *Left Image Fit* and *Right Image Fit* decide how a picture is placed: **Fit** shows all of it
+  with margins, **Crop** fills the screen and cuts the edges, **Stretch** fills the screen and distorts the picture.
 - **Idle images (like the stock firmware):** put `idle_screen_left.jpg` and `idle_screen_right.jpg` (about 480x648, portrait) on the SD card root. The
-  left one is used when *Left Sleep Screen* is set to *Custom*; the right one when *Right Sleep Screen* is set to the idle image option (the default is Title &
-  Author). Each is converted once and cached; replace the file to change it.
+  left one is used when *Left Sleep Screen* is set to *Custom*; the right one when *Right Sleep Screen* is set to *Idle Image*. Each is converted once and
+  cached (and again when you change the image fit); replace the file to change it. Covers use the same image fit setting.
 - **Refresh:** a full screen flash happens every N page turns (*Settings > Reader > refresh frequency*, default 15). Lower it if you see ghosting.
 
 ## Library books (Libby)

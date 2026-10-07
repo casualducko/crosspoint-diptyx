@@ -27,7 +27,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     TRANSPARENT_CUSTOM = 7,
     SLEEP_SCREEN_MODE_COUNT
   };
-  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
+  // STRETCH is a Diptyx addition: the picture fills the screen, each axis scaled on its own.
+  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, STRETCH = 2, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
     BLACK_AND_WHITE = 1,
@@ -273,8 +274,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum SPREAD_ORDER { SPREAD_AUTO = 0, SPREAD_LTR = 1, SPREAD_RTL = 2, SPREAD_ORDER_COUNT };
   uint8_t spreadOrder = SPREAD_AUTO;
   // Diptyx only: what the right panel shows while the device sleeps.
-  enum RIGHT_SLEEP_SCREEN { RIGHT_SLEEP_IDLE_IMAGE = 0, RIGHT_SLEEP_TITLE_AUTHOR = 1, RIGHT_SLEEP_SCREEN_COUNT };
+  enum RIGHT_SLEEP_SCREEN {
+    RIGHT_SLEEP_IDLE_IMAGE = 0,
+    RIGHT_SLEEP_TITLE_AUTHOR = 1,
+    RIGHT_SLEEP_COVER = 2,
+    RIGHT_SLEEP_DARK = 3,
+    RIGHT_SLEEP_LIGHT = 4,
+    RIGHT_SLEEP_BLANK = 5,
+    RIGHT_SLEEP_SCREEN_COUNT
+  };
   uint8_t rightSleepScreen = RIGHT_SLEEP_TITLE_AUTHOR;
+  // How an image or cover is placed on the right sleep screen (the left uses sleepScreenCoverMode).
+  uint8_t rightImageFit = FIT;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // X4 Pro: double-click power toggles the frontlight. Disabling frees the

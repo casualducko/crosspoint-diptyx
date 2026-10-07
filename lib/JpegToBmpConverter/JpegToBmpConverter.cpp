@@ -516,7 +516,7 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
                                                      int targetHeight, bool oneBit, bool crop,
-                                                     bool originalThresholds, bool toneForBw) {
+                                                     bool originalThresholds, bool toneForBw, bool stretch) {
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -592,6 +592,10 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
     outHeight = static_cast<int>(srcHeight * scale);
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
+    if (stretch) {  // fill the target exactly, each axis scaled on its own
+      outWidth = targetWidth;
+      outHeight = targetHeight;
+    }
 
     LOG_DBG("JPG", "Scaling source %dx%d (decode grid %dx%d) -> %dx%d (target %dx%d)", srcWidth, srcHeight,
             scaleSrcWidth, scaleSrcHeight, outWidth, outHeight, targetWidth, targetHeight);
@@ -726,10 +730,10 @@ bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, b
 }
 
 // Cover for a black-and-white-only panel (the Diptyx)
-bool JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop) {
+bool JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop, bool stretch) {
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, true, crop, false, true);
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, true, crop, false, true, stretch);
 }
 
 // Convert with custom target size (for thumbnails, 2-bit)

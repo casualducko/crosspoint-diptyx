@@ -727,16 +727,16 @@ const std::string& Epub::getLanguage() const {
   return bookMetadataCache->coreMetadata.language;
 }
 
-std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
+std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds, bool stretched) const {
   // The Diptyx panels are black and white, so its covers are 1-bit dithers kept apart from the 2-bit ones.
   const char* variant = BoardConfig::isDiptyx() ? "_bw_v1" : (originalThresholds ? "_original" : "_legacy_v2");
-  const auto coverFileName = std::string("cover") + variant + (cropped ? "_crop" : "");
+  const auto coverFileName = std::string("cover") + variant + (stretched ? "_stretch" : (cropped ? "_crop" : ""));
   return cachePath + "/" + coverFileName + ".bmp";
 }
 
-bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
+bool Epub::generateCoverBmp(bool cropped, bool originalThresholds, bool stretched) const {
   // Already generated, return true
-  if (Storage.exists(getCoverBmpPath(cropped, originalThresholds).c_str())) {
+  if (Storage.exists(getCoverBmpPath(cropped, originalThresholds, stretched).c_str())) {
     return true;
   }
 
@@ -752,8 +752,9 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   }
 
   if (Txt::isTxtOrMd(filepath)) {
-    return Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds), 0, cropped,
-                                       originalThresholds);
+    // Text books have no stretch variant: they get the fit or crop cover under the stretch name.
+    return Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds, stretched), 0,
+                                       cropped, originalThresholds);
   }
 
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
@@ -768,11 +769,11 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     }
 
     HalFile coverBmp;
-    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds), coverBmp)) {
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds, stretched), coverBmp)) {
       return false;
     }
     const bool success = BoardConfig::isDiptyx()
-                             ? JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(coverJpg, coverBmp, cropped)
+                             ? JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(coverJpg, coverBmp, cropped, stretched)
                              : JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped, originalThresholds);
     // Explicitly close() files before calling Storage.remove()
     coverJpg.close();
@@ -781,7 +782,7 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from cover image");
-      Storage.remove(getCoverBmpPath(cropped, originalThresholds).c_str());
+      Storage.remove(getCoverBmpPath(cropped, originalThresholds, stretched).c_str());
     }
     LOG_DBG("EBP", "Generated BMP from JPG cover image, success: %s", success ? "yes" : "no");
     return success;
@@ -799,11 +800,11 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     }
 
     HalFile coverBmp;
-    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds), coverBmp)) {
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds, stretched), coverBmp)) {
       return false;
     }
     const bool success = BoardConfig::isDiptyx()
-                             ? PngToBmpConverter::pngFileTo1BitCoverBmpStream(coverPng, coverBmp, cropped)
+                             ? PngToBmpConverter::pngFileTo1BitCoverBmpStream(coverPng, coverBmp, cropped, stretched)
                              : PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped, originalThresholds);
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
@@ -812,7 +813,7 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from PNG cover image");
-      Storage.remove(getCoverBmpPath(cropped, originalThresholds).c_str());
+      Storage.remove(getCoverBmpPath(cropped, originalThresholds, stretched).c_str());
     }
     LOG_DBG("EBP", "Generated BMP from PNG cover image, success: %s", success ? "yes" : "no");
     return success;

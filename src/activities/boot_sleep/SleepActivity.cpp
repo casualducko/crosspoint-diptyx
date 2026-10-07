@@ -30,6 +30,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/IdleImage.h"
 
 namespace {
 
@@ -52,35 +53,11 @@ constexpr char IDLE_LEFT_JPG[] = "/idle_screen_left.jpg";
 constexpr char IDLE_LEFT_BMP[] = "/.crosspoint/idle_left_bw.bmp";
 constexpr char IDLE_LEFT_KEY[] = "/.crosspoint/idle_left_bw.key";
 
-// True when a usable cached conversion of IDLE_LEFT_JPG exists afterwards. The cache follows the JPEG (size, time).
-bool ensureIdleLeftCache() {
-  if (!Storage.exists(IDLE_LEFT_JPG)) return false;
-  std::string jpgKey;
-  {
-    HalFile jpg;
-    if (!Storage.openFileForRead("SLP", IDLE_LEFT_JPG, jpg)) return false;
-    jpgKey = std::to_string(jpg.fileSize()) + ":" + std::to_string(jpg.modificationTime());
-  }
-  std::string cachedKey;
-  const bool haveKey = Storage.exists(IDLE_LEFT_KEY) && Storage.readFileToString("SLP", IDLE_LEFT_KEY, 96, cachedKey);
-  if (haveKey && cachedKey == jpgKey + ":bad") return false;  // a JPEG that failed to convert is not retried
-  if (haveKey && cachedKey == jpgKey && Storage.exists(IDLE_LEFT_BMP)) return true;
-  Storage.remove(IDLE_LEFT_KEY);
-  HalFile jpg;
-  HalFile bmp;
-  if (!Storage.openFileForRead("SLP", IDLE_LEFT_JPG, jpg) || !Storage.openFileForWrite("SLP", IDLE_LEFT_BMP, bmp)) {
-    return false;
-  }
-  const bool ok = JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(jpg, bmp, true);
-  bmp.close();
-  if (!ok) {
-    Storage.remove(IDLE_LEFT_BMP);
-    Storage.writeFile(IDLE_LEFT_KEY, String((jpgKey + ":bad").c_str()));
-    LOG_ERR("SLP", "Could not convert %s", IDLE_LEFT_JPG);
-    return false;
-  }
-  Storage.writeFile(IDLE_LEFT_KEY, String(jpgKey.c_str()));  // written last: a half-written cache is never trusted
-  return true;
+// True when a usable cached conversion of IDLE_LEFT_JPG exists afterwards for the chosen image fit. The cache follows
+// the JPEG (size, time), the screen and the fit setting.
+bool ensureIdleLeftCache(const GfxRenderer& r) {
+  return idleimage::ensureConverted("SLP", IDLE_LEFT_JPG, IDLE_LEFT_BMP, IDLE_LEFT_KEY, SETTINGS.sleepScreenCoverMode,
+                                    r.getScreenWidth(), r.getScreenHeight());
 }
 
 struct BitmapPlacement {
@@ -614,7 +591,7 @@ void SleepActivity::onEnter() {
 
 void SleepActivity::renderCustomSleepScreen() const {
   // Diptyx: honour the stock firmware's idle_screen_left.jpg before the CrossPoint sleep.bmp / sleep folder.
-  if (BoardConfig::isDiptyx() && ensureIdleLeftCache()) {
+  if (BoardConfig::isDiptyx() && ensureIdleLeftCache(renderer)) {
     HalFile idleFile;
     if (Storage.openFileForRead("SLP", IDLE_LEFT_BMP, idleFile)) {
       Bitmap idle(idleFile);
@@ -872,6 +849,7 @@ void SleepActivity::renderCoverSleepScreen() const {
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
   std::string coverBmpPath;
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  const bool stretched = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::STRETCH;
 
   // Check if the current book is XTC, TXT, or EPUB
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
@@ -897,12 +875,12 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastEpub.generateCoverBmp(cropped, originalThresholds)) {
+    if (!lastEpub.generateCoverBmp(cropped, originalThresholds, stretched)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped, originalThresholds);
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, originalThresholds, stretched);
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }

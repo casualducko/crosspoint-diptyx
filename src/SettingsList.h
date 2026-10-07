@@ -238,14 +238,20 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           &CrossPointSettings::sleepScreen, std::move(sleepScreenValues), "sleepScreen",
                           StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(dualPanel ? StrId::STR_LEFT_COVER_MODE : StrId::STR_SLEEP_COVER_MODE,
-                          &CrossPointSettings::sleepScreenCoverMode, {StrId::STR_FIT, StrId::STR_CROP},
+                          &CrossPointSettings::sleepScreenCoverMode,
+                          dualPanel ? std::vector<StrId>{StrId::STR_FIT, StrId::STR_CROP, StrId::STR_STRETCH}
+                                    : std::vector<StrId>{StrId::STR_FIT, StrId::STR_CROP},
                           "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(dualPanel ? StrId::STR_LEFT_COVER_FILTER : StrId::STR_SLEEP_COVER_FILTER,
                           &CrossPointSettings::sleepScreenCoverFilter,
                           {StrId::STR_NONE_OPT, StrId::STR_FILTER_CONTRAST, StrId::STR_INVERTED},
                           "sleepScreenCoverFilter", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_RIGHT_SLEEP_SCREEN, &CrossPointSettings::rightSleepScreen,
-                          {StrId::STR_RIGHT_SLEEP_IDLE_IMAGE, StrId::STR_RIGHT_SLEEP_TITLE_AUTHOR}, "rightSleepScreen",
+                          {StrId::STR_RIGHT_SLEEP_IDLE_IMAGE, StrId::STR_RIGHT_SLEEP_TITLE_AUTHOR, StrId::STR_COVER,
+                           StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_NONE_OPT},
+                          "rightSleepScreen", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_RIGHT_IMAGE_FIT, &CrossPointSettings::rightImageFit,
+                          {StrId::STR_FIT, StrId::STR_CROP, StrId::STR_STRETCH}, "rightImageFit",
                           StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
                           {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
@@ -533,6 +539,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_SPREAD_ORDER);
     // The right-screen sleep choice needs the Diptyx's second panel.
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_SLEEP_SCREEN);
+    if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_IMAGE_FIT);
     // Quick Resume on Timeout is not verified on the Diptyx (two panels, wake is a reboot), so it is hidden there.
     if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_QUICK_RESUME_TIMEOUT);
     // The Diptyx reads in portrait with a spread, so front buttons never follow an orientation.

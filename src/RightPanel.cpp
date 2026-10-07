@@ -24,6 +24,8 @@
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
 #include "fontIds.h"
+#include "images/Logo120.h"
+#include "util/IdleImage.h"
 
 namespace {
 
@@ -164,53 +166,52 @@ void drawQuietTitle(GfxRenderer& r, const BookCard& card) {
   }
 }
 
-// Makes sure the 1-bit conversion of the stock idle image is cached. False if there is no usable image. This decodes a
-// JPEG, so it runs before present() parks a copy of the left frame (which would take heap away from the decoder).
+// Makes sure the 1-bit conversion of the stock idle image is cached for the chosen image fit. False if there is no
+// usable image. This decodes a JPEG, so it runs before present() parks a copy of the left frame (which would take heap
+// away from the decoder).
 bool ensureIdleCache(const GfxRenderer& r) {
-  if (!Storage.exists(IDLE_JPG)) return false;
-  // The conversion is cached, but must follow the JPEG: replacing idle_screen_right.jpg (a different size) has to
-  // regenerate it. The size of the source file is the cache key.
-  std::string jpgKey;
-  {
-    HalFile jpg;
-    if (!Storage.openFileForRead("RP", IDLE_JPG, jpg)) return false;
-    jpgKey = std::to_string(jpg.fileSize()) + ":" + std::to_string(jpg.modificationTime()) + ":" +
-             std::to_string(r.getScreenWidth()) + "x" + std::to_string(r.getScreenHeight());
-  }
-  std::string cachedKey;
-  const bool haveKey = Storage.exists(IDLE_KEY) && Storage.readFileToString("RP", IDLE_KEY, 96, cachedKey);
-  // A JPEG that failed to convert is remembered (":bad") so it is not retried on every sleep until the file changes.
-  if (haveKey && cachedKey == jpgKey + ":bad") return false;
-  const bool cacheValid = haveKey && Storage.exists(IDLE_BMP) && cachedKey == jpgKey;
-  if (!cacheValid) {
-    Storage.remove(IDLE_KEY);
-    HalFile jpg;
-    HalFile bmp;
-    if (!Storage.openFileForRead("RP", IDLE_JPG, jpg) || !Storage.openFileForWrite("RP", IDLE_BMP, bmp)) return false;
-    const bool ok =
-        JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(jpg, bmp, r.getScreenWidth(), r.getScreenHeight());
-    bmp.close();
-    if (!ok) {
-      Storage.remove(IDLE_BMP);
-      Storage.writeFile(IDLE_KEY, String((jpgKey + ":bad").c_str()));
-      LOG_ERR("RP", "Could not convert %s", IDLE_JPG);
-      return false;
-    }
-    Storage.writeFile(IDLE_KEY, String(jpgKey.c_str()));  // written last: a half-written cache is never trusted
-  }
-  return true;
+  return idleimage::ensureConverted("RP", IDLE_JPG, IDLE_BMP, IDLE_KEY, SETTINGS.rightImageFit, r.getScreenWidth(),
+                                    r.getScreenHeight());
 }
 
-// Draws the cached idle image into the framebuffer. False if it cannot be read.
-bool drawIdleImage(GfxRenderer& r) {
+// Draws a cached 1-bit bitmap (idle image or cover) placed as the image fit says. False if it cannot be read.
+bool drawBitmapFile(GfxRenderer& r, const char* path) {
   HalFile file;
-  if (!Storage.openFileForRead("RP", IDLE_BMP, file)) return false;
+  if (!Storage.openFileForRead("RP", path, file)) return false;
   Bitmap bitmap(file);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;
   r.clearScreen();
-  const int x = std::max(0, (r.getScreenWidth() - bitmap.getWidth()) / 2);
-  const int y = std::max(0, (r.getScreenHeight() - bitmap.getHeight()) / 2);
-  return r.drawBitmap(bitmap, x, y, r.getScreenWidth(), r.getScreenHeight());
+  const auto p = idleimage::place(bitmap.getWidth(), bitmap.getHeight(), r.getScreenWidth(), r.getScreenHeight(),
+                                  SETTINGS.rightImageFit == CrossPointSettings::CROP);
+  return r.drawBitmap(bitmap, p.x, p.y, r.getScreenWidth(), r.getScreenHeight(), p.cropX, p.cropY);
+}
+
+// The current book's cover as a 1-bit BMP placed as the image fit says; empty when there is no book or no cover. This
+// decodes the cover, so it runs before present() like ensureIdleCache().
+std::string sleepCoverBmpPath() {
+  if (APP_STATE.openEpubPath.empty()) return "";
+  const uint8_t fit = SETTINGS.rightImageFit;
+  const bool cropped = fit == CrossPointSettings::CROP;
+  const bool stretched = fit == CrossPointSettings::STRETCH;
+  if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
+    Xtc book(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!book.load() || !book.generateCoverBmp()) return "";
+    return book.getCoverBmpPath();
+  }
+  if (FsHelpers::hasReflowableBookExtension(APP_STATE.openEpubPath)) {
+    Epub book(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!book.load(true, true) || !book.generateCoverBmp(cropped, false, stretched)) return "";
+    return book.getCoverBmpPath(cropped, false, stretched);
+  }
+  return "";
+}
+
+// Dark, Light and Blank: the logo on black or white, or nothing at all.
+void drawPlainSleepScreen(GfxRenderer& r, const uint8_t mode) {
+  r.clearScreen();
+  if (mode == CrossPointSettings::RIGHT_SLEEP_BLANK) return;
+  r.drawImage(Logo120, (r.getScreenWidth() - 120) / 2, (r.getScreenHeight() - 120) / 2, 120, 120);
+  if (mode == CrossPointSettings::RIGHT_SLEEP_DARK) r.invertScreen();
 }
 
 template <typename DrawFn>
@@ -302,20 +303,32 @@ void markDirty() { shownKey = 0; }
 
 void showSleepScreen(GfxRenderer& renderer, HalDisplay& display) {
   if (!BoardConfig::isDiptyx()) return;
+  const uint8_t mode = SETTINGS.rightSleepScreen;
+  if (mode == CrossPointSettings::RIGHT_SLEEP_DARK || mode == CrossPointSettings::RIGHT_SLEEP_LIGHT ||
+      mode == CrossPointSettings::RIGHT_SLEEP_BLANK) {
+    presentOnRight(renderer, display, [&] { drawPlainSleepScreen(renderer, mode); });
+    shownKey = 0;  // force the home card to be redrawn after the next wake
+    return;
+  }
+
   BookCard card;
   // Title & Author follows the left screen's cover rule: only a book that is open right now (sleeping from the home
-  // screen has none); otherwise this falls back to the idle image or the card.
-  const bool quiet = SETTINGS.rightSleepScreen == CrossPointSettings::RIGHT_SLEEP_TITLE_AUTHOR &&
-                     !APP_STATE.openEpubPath.empty() && currentBook(card) && !card.title.empty();
+  // screen has none); otherwise this falls back to the cover, the idle image or the card.
+  const bool quiet = mode == CrossPointSettings::RIGHT_SLEEP_TITLE_AUTHOR && !APP_STATE.openEpubPath.empty() &&
+                     currentBook(card) && !card.title.empty();
   // Everything that decodes or opens a book happens before present(), while the heap is not yet short by the parked
   // left frame; the draw callback only paints.
-  const bool idleReady = !quiet && ensureIdleCache(renderer);
-  const bool cardFromBook = !quiet && !idleReady && currentBook(card);
+  const std::string coverBmp = (!quiet && mode == CrossPointSettings::RIGHT_SLEEP_COVER) ? sleepCoverBmpPath() : "";
+  const bool coverReady = !coverBmp.empty();
+  const bool idleReady = !quiet && !coverReady && ensureIdleCache(renderer);
+  const bool cardFromBook = !quiet && !coverReady && !idleReady && currentBook(card);
   if (cardFromBook) resolveCover(card);
   presentOnRight(renderer, display, [&] {
     if (quiet) {
       drawQuietTitle(renderer, card);
-    } else if (!(idleReady && drawIdleImage(renderer))) {
+    } else if (coverReady) {
+      drawBitmapFile(renderer, coverBmp.c_str());
+    } else if (!(idleReady && drawBitmapFile(renderer, IDLE_BMP))) {
       drawBookCard(renderer, card);
     }
   });
