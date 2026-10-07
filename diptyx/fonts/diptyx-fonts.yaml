@@ -293,3 +293,72 @@ families:
     bolditalic:
       path: builtinFonts/source/OpenDyslexic/OpenDyslexic-BoldItalic.otf
   mono: true
+- name: NotoNaskhArabicMono
+  description: Arabic naskh (Arabic, Latin) - mono-hinted, regular and bold
+  scripts:
+  - arabic
+  - latin
+  intervals: arabic,latin-ext,punctuation,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/notonaskharabic/NotoNaskhArabic%5Bwght%5D.ttf
+      variable:
+        wght: 400
+    bold:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/notonaskharabic/NotoNaskhArabic%5Bwght%5D.ttf
+      variable:
+        wght: 700
+  mono: true
+- name: FrankRuhlLibreMono
+  description: Hebrew serif for books (Hebrew, Latin) - mono-hinted, regular and bold
+  scripts:
+  - hebrew
+  - latin
+  intervals: hebrew,latin-ext,punctuation,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/FrankRuhlLibre%5Bwght%5D.ttf
+      variable:
+        wght: 400
+    bold:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/FrankRuhlLibre%5Bwght%5D.ttf
+      variable:
+        wght: 700
+  mono: true
+- name: NotoSansHebrewMono
+  description: Hebrew sans (Hebrew, Latin) - mono-hinted, regular and bold
+  scripts:
+  - hebrew
+  - latin
+  intervals: hebrew,latin-ext,punctuation,ipa-chars
+  sizes:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 18
+  styles:
+    regular:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/notosanshebrew/NotoSansHebrew%5Bwdth,wght%5D.ttf
+      variable:
+        wght: 400
+        wdth: 100
+    bold:
+      url: https://raw.githubusercontent.com/google/fonts/main/ofl/notosanshebrew/NotoSansHebrew%5Bwdth,wght%5D.ttf
+      variable:
+        wght: 700
+        wdth: 100
+  mono: true
+  force_autohint: true

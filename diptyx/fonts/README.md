@@ -1,7 +1,7 @@
 # Diptyx font pack
 
-Ten reader font families, all **mono-hinted** and prebuilt as CrossPoint SD-card fonts (`.cpfont`, format version 4) at 10, 12, 14,
-16 and 18 pt (about 30 MB for everything; copy only what you want). The firmware also has **Literata Mono built in at 10 to 18 pt** (its
+Thirteen reader font families, all **mono-hinted** and prebuilt as CrossPoint SD-card fonts (`.cpfont`, format version 4) at 10, 12, 14,
+16 and 18 pt (about 35 MB for everything; copy only what you want). The firmware also has **Literata Mono built in at 10 to 18 pt** (its
 serif family), and 10 pt is the stock reading size, so nothing here is needed to get crisp text; this pack adds more families.
 
 ## Why mono-hinted
@@ -23,6 +23,9 @@ crisp. Diagonals and curls are still stair-stepped (the panel is about 138 ppi);
 | **Inter Mono** | sans | A clean, neutral screen sans. |
 | **Noto Sans Monochrome** | sans | Broad script coverage. (Not the monospace "Noto Sans Mono" typeface.) |
 | **Dyslexic Mono** | accessibility | OpenDyslexic, for readers who find it easier. Renamed because the original name is reserved. |
+| **Noto Naskh Arabic Mono** | serif (naskh) | For Arabic books. Arabic and Latin; regular and bold (no italic: italic text uses regular). |
+| **Frank Ruhl Libre Mono** | serif | For Hebrew books, vowel points included. Hebrew and Latin; regular and bold. |
+| **Noto Sans Hebrew Mono** | sans | Hebrew sans. Hebrew and Latin; regular and bold. |
 
 ## Install
 
