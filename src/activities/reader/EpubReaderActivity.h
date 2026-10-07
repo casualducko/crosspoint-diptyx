@@ -191,6 +191,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void renderStatusBar(int pageOffset = 0) const;
   // Diptyx two-page spread: left panel = page N (N even), right panel = page N+1. Page turns advance by two.
   bool spreadActive() const;
+  bool spreadRtl() const;       // a right-to-left spread: the first page of each pair is on the right panel
+  int leftPageIndex() const;    // the page drawn on the left panel
   void renderSpreadRightPage(int marginTop, int marginLeft, bool leftWasFull);
   uint32_t rightPageKey = 0;  // what the right panel currently shows (see renderSpreadRightPage)
   void applyOrientation(uint8_t orientation);

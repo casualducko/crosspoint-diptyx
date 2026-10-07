@@ -333,6 +333,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_READER),
         SettingInfo::Toggle(StrId::STR_TWO_PAGE_SPREAD, &CrossPointSettings::twoPageSpread, "twoPageSpread",
                             StrId::STR_CAT_READER),
+        SettingInfo::Enum(StrId::STR_SPREAD_ORDER, &CrossPointSettings::spreadOrder,
+                          {StrId::STR_SPREAD_AUTO, StrId::STR_SPREAD_LTR, StrId::STR_SPREAD_RTL}, "spreadOrder",
+                          StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
@@ -527,6 +530,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_FONT_WEIGHT);
     // Two-page spread needs the Diptyx's second panel.
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_TWO_PAGE_SPREAD);
+    if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_SPREAD_ORDER);
     // The right-screen sleep choice needs the Diptyx's second panel.
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_SLEEP_SCREEN);
     // Quick Resume on Timeout is not verified on the Diptyx (two panels, wake is a reboot), so it is hidden there.

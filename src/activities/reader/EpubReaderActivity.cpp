@@ -344,7 +344,7 @@ void EpubReaderActivity::openDictionaryWordSelect() {
     return;
   }
   if (!section) return;
-  auto page = section->loadPage(section->currentPage);
+  auto page = section->loadPage(leftPageIndex());
   if (!page) return;
 
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -365,7 +365,7 @@ void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
     return;
   }
 
-  auto page = section->loadPage(section->currentPage);
+  auto page = section->loadPage(leftPageIndex());
   if (!page) return;
 
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -1563,6 +1563,18 @@ void EpubReaderActivity::renderBook() {
     pageLoadRetryCount = 0;
 
     currentPageVisibleOffset = p->visibleTextOffset;
+    if (spreadRtl()) {
+      // Right to left, the position page goes to the right panel (renderSpreadRightPage); this panel draws the page
+      // after it, or stays blank when the chapter ends on an odd page.
+      const int leftIndex = leftPageIndex();
+      p = leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex) : nullptr;
+      if (!p) p = makeUniqueNoThrow<Page>();
+      if (!p) {
+        LOG_ERR("ERS", "OOM: blank left page");
+        requestUpdate();
+        return;
+      }
+    }
     currentPageFootnotes = std::move(p->footnotes);
     currentPageLinks = std::move(p->links);
     currentPageLinkMarginLeft = orientedMarginLeft;
@@ -1944,11 +1956,26 @@ bool EpubReaderActivity::spreadActive() const {
   return BoardConfig::isDiptyx() && SETTINGS.twoPageSpread && SETTINGS.orientation == CrossPointSettings::PORTRAIT;
 }
 
-// Draws page N+1 on the right panel (blank when the chapter has no such page). The left panel's frame in the shared
+// Spread order: Auto follows the book's language (Hebrew, Arabic, Persian); the setting can force either direction.
+bool EpubReaderActivity::spreadRtl() const {
+  if (!spreadActive()) return false;
+  if (SETTINGS.spreadOrder == CrossPointSettings::SPREAD_RTL) return true;
+  if (SETTINGS.spreadOrder == CrossPointSettings::SPREAD_LTR) return false;
+  return epub && ReaderUtils::isRtlBookLanguage(epub->getLanguage());
+}
+
+// The position page is always section->currentPage (even, the first page of the pair). Left to right it is drawn on the
+// left panel; right to left it goes to the right panel and the left panel draws the page after it.
+int EpubReaderActivity::leftPageIndex() const {
+  return section ? section->currentPage + (spreadRtl() ? 1 : 0) : 0;
+}
+
+// Draws the other page of the pair on the right panel (blank when the chapter has no such page): page N+1 left to
+// right, the position page itself right to left. The left panel's frame in the shared
 // framebuffer is saved and restored around it, so the menu overlay and re-renders still see the left page.
 void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int marginLeft, const bool leftWasFull) {
   if (!section) return;
-  const int n = section->currentPage + 1;
+  const int n = section->currentPage + (spreadRtl() ? 0 : 1);
   const bool pageExists = n < static_cast<int>(section->pageCount);
   const int fontId = SETTINGS.getReaderFontId();
 
@@ -1957,7 +1984,8 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   uint32_t key = 2166136261u;
   for (const uint32_t v : {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n),
                            static_cast<uint32_t>(pageExists), static_cast<uint32_t>(section->pageCount),
-                           static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin)}) {
+                           static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin),
+                           static_cast<uint32_t>(spreadRtl())}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
@@ -1992,7 +2020,14 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   }
 }
 
-void EpubReaderActivity::renderStatusBar(const int pageOffset) const {
+void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
+  // Callers pass 0 for the left panel and 1 for the right one; right to left the panels hold the pages the other way round.
+  const int pageOffset = spreadRtl() ? 1 - pageOffsetOnPanel : pageOffsetOnPanel;
+  // A last odd page leaves the left panel without a page right to left: no page number for a page that does not exist.
+  if (pageOffset > 0 && section && !section->isBuilding() &&
+      section->currentPage + pageOffset >= static_cast<int>(section->pageCount)) {
+    return;
+  }
   const int currentPage = section ? section->currentPage + 1 + pageOffset : 1;
   const float pageCount = section ? section->estimatedTotalPages() : 1;
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;

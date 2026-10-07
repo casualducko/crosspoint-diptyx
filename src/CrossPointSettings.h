@@ -268,6 +268,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Diptyx only: show two consecutive pages, one on each panel (left = page N, right = page N+1).
   uint8_t twoPageSpread = 1;
+  // Diptyx only: which panel holds the first page of a spread. Auto follows the book's language (right to left for
+  // Hebrew, Arabic and Persian).
+  enum SPREAD_ORDER { SPREAD_AUTO = 0, SPREAD_LTR = 1, SPREAD_RTL = 2, SPREAD_ORDER_COUNT };
+  uint8_t spreadOrder = SPREAD_AUTO;
   // Diptyx only: what the right panel shows while the device sleeps.
   enum RIGHT_SLEEP_SCREEN { RIGHT_SLEEP_IDLE_IMAGE = 0, RIGHT_SLEEP_TITLE_AUTHOR = 1, RIGHT_SLEEP_SCREEN_COUNT };
   uint8_t rightSleepScreen = RIGHT_SLEEP_TITLE_AUTHOR;
