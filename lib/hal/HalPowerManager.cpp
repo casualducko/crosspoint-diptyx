@@ -154,13 +154,23 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
     return _batteryCachedPercent;
   }
 
+  // Diptyx: the average moves at most every 10 s, so the two status bars of a spread agree, and the value is shown in
+  // 5% steps (a voltage reading is no better than that).
+  constexpr unsigned long DIPTYX_BATTERY_AVERAGE_MS = 10000;
+  const bool diptyx = BoardConfig::isDiptyx();
+  const unsigned long now = millis();
+  if (diptyx && _batteryCachedPercent != 0 && now - _batteryLastPollMs < DIPTYX_BATTERY_AVERAGE_MS) {
+    return (_batteryCachedPercent + 25) / 50 * 5;
+  }
+  _batteryLastPollMs = now;
+
   // smooth the battery %.
   if (_batteryCachedPercent == 0) {
     _batteryCachedPercent = 10 * battery.readPercentage();
   } else {
     _batteryCachedPercent = (_batteryCachedPercent * 9 + battery.readPercentage() * 10) / 10;
   }
-  return _batteryCachedPercent / 10;
+  return diptyx ? (_batteryCachedPercent + 25) / 50 * 5 : _batteryCachedPercent / 10;
 }
 
 HalPowerManager::Lock::Lock() {
