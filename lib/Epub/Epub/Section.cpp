@@ -1,5 +1,6 @@
 #include "Section.h"
 
+#include <BoardConfig.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -57,7 +58,7 @@ namespace {
 // v49 was used by pre-release builds with a different header layout.
 // v50: Paragraph indentation width in the header for cache validation.
 // v51: boldBody flag in the header (Diptyx Reader Font Weight) for cache validation.
-constexpr uint8_t SECTION_FILE_VERSION = 51;
+constexpr uint8_t SECTION_FILE_VERSION = 52;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -408,7 +409,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->contentBase = (lastSlash != std::string::npos) ? localPath.substr(0, lastSlash + 1) : "";
   ctx->imageBasePath = epub->getCachePath() + "/img_" + std::to_string(spineIndex) + "_";
 
-  if (spec.embeddedStyle) {
+  if (spec.embeddedStyle || BoardConfig::isDiptyx()) {
     ctx->cssParser = epub->getCssParser();
     if (ctx->cssParser) {
       const CssParser::CacheLoadResult cacheResult = ctx->cssParser->loadFromCache();

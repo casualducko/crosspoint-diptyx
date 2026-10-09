@@ -147,6 +147,21 @@ bool isTableStructuralTag(const char* name) {
   return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
 }
 
+// Embedded Style off on the Diptyx: only the emphasis (italic, bold) of the book's CSS is kept. Layout, display and
+// everything else stay ignored.
+static CssStyle emphasisOnly(const CssStyle& full) {
+  CssStyle out;
+  if (full.hasFontStyle()) {
+    out.fontStyle = full.fontStyle;
+    out.defined.fontStyle = 1;
+  }
+  if (full.hasFontWeight()) {
+    out.fontWeight = full.fontWeight;
+    out.defined.fontWeight = 1;
+  }
+  return out;
+}
+
 void ChapterHtmlSlimParser::applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css) {
   if (css.hasDirection()) {
     entry.hasDirection = true;
@@ -783,6 +798,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
       cssStyle.applyOver(inlineStyle);
     }
+    if (!self->embeddedStyle) cssStyle = emphasisOnly(cssStyle);
   }
 
   // HTML hidden attribute overrides CSS display.

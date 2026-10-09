@@ -212,7 +212,8 @@ bool EpubReaderActivity::loadBook() {
   {
     std::optional<GfxRenderer::FrameBufferLoan> loan;
     if (uncached) loan.emplace(renderer);
-    loaded = loadedEpub->load(true, SETTINGS.embeddedStyle == 0);
+    // The Diptyx reads the stylesheet even with Embedded Style off, for italic and bold (see the parser).
+    loaded = loadedEpub->load(true, SETTINGS.embeddedStyle == 0 && !BoardConfig::isDiptyx());
   }
   if (!loaded) {
     // Surfaced by handleLoadFailure() as a dialog; loadedEpub dies with this
