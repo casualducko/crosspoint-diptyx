@@ -272,8 +272,10 @@ int pngDrawCallback(PNGDRAW* pDraw) {
       emitBoxRow(ctx);
       ctx->boxDstY = dstY;
     }
+    // PNGdec parses tRNS while decoding, so the transparent color is read here, as the row-skipping path does.
+    const uint32_t boxTransparentColor = ctx->decoder ? ctx->decoder->getTransparentColor() : 0;
     convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->iBpp, pDraw->pPalette,
-                      pDraw->iHasAlpha, 0, nullptr);
+                      pDraw->iHasAlpha, boxTransparentColor, nullptr);
     const int vw = ctx->visibleWidth;
     const int dw = ctx->dstWidth;
     for (int dstX = 0; dstX < dw; dstX++) {
