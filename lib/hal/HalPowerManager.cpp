@@ -112,11 +112,11 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, bool powerOff) const {
     const bool dropLatch = powerOff && BoardConfig::isDiptyx() && pin == BoardConfig::ACTIVE.power.latch0;
     digitalWrite(pin, dropLatch ? LOW : HIGH);
     gpio_hold_en(g);
-    if (dropLatch) {
-      // Stay awake (like the stock firmware, which idles after dropping the latch) so the running chip's load lets
-      // the rail collapse. A chip already in deep sleep draws so little that the rail can linger for a long while,
-      // and a button press in that window wakes it. On USB the rail never collapses, so give up after 3 s.
-      for (int i = 0; i < 30; ++i) delay(100);
+    if (dropLatch && !gpio.isUsbConnected()) {
+      // The rail takes several seconds to collapse after the latch drops, and a button press while the chip is in
+      // deep sleep in that window wakes it. Idle awake (like the stock firmware) so the chip is still running, and
+      // ignoring buttons, when the power goes. On USB the rail never collapses, so skip the wait.
+      for (int i = 0; i < 150; ++i) delay(100);
     }
   }
 
