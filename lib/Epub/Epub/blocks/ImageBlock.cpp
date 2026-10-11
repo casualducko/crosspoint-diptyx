@@ -11,6 +11,7 @@
 #include <cstring>
 #include <new>
 
+#include "../../../../src/CrossPointSettings.h"
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 
@@ -35,9 +36,11 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 namespace {
 
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache); the Diptyx caches its 1-bit dither as .pxd (renamed when the dither
-  // changes) so caches written by an earlier dither are not reused
-  const char* ext = BoardConfig::isDiptyx() ? ".pxd" : ".pxc";
+  // Replace extension with .pxc (pixel cache). The Diptyx caches its 1-bit result as .pxe<mode>: the extension changes
+  // whenever the dither or the downscale changes, and carries the Image Dithering choice, so a cache written by an
+  // earlier dither or another mode is never reused.
+  std::string ext = ".pxc";
+  if (BoardConfig::isDiptyx()) ext = std::string(".pxe") + static_cast<char>('0' + (SETTINGS.imageDither % 10));
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
     return imagePath.substr(0, dotPos) + ext;
@@ -394,6 +397,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.maxHeight = height;
   config.useGrayscale = true;
   config.useDithering = true;
+  config.ditherMode = SETTINGS.imageDither;
   config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode

@@ -45,6 +45,12 @@ struct PngContext {
   uint8_t* grayLineBuffer{nullptr};
   uint8_t* alphaLineBuffer{nullptr};
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
+
+  // Diptyx opaque downscale: every source row under an output row is averaged (sums of per-row horizontal averages),
+  // instead of keeping only the first source row. Null when the plain row-skipping path is used.
+  uint32_t* boxSum{nullptr};
+  int boxDstY{-1};  // output row being built
+  int boxRows{0};   // source rows added to it
 };
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
@@ -212,6 +218,43 @@ void convertLineToGray(const uint8_t* pPixels, uint8_t* grayLine, int width, int
   }
 }
 
+// Writes the averaged output row built by the box filter, then clears it for the next one.
+void emitBoxRow(PngContext* ctx) {
+  if (!ctx->boxSum || ctx->boxRows <= 0 || ctx->boxDstY < 0) return;
+  const int dstY = ctx->boxDstY;
+  const int outY = ctx->config->y + dstY;
+  const int dstWidth = ctx->dstWidth;
+  if (outY < ctx->screenHeight) {
+    DirectPixelWriter pw;
+    pw.init(*ctx->renderer);
+    pw.beginRow(outY);
+    bool caching = ctx->caching;
+    DirectCacheWriter cw;
+    if (caching) {
+      if (!ctx->cache.advanceTo(dstY)) {
+        caching = false;
+        ctx->caching = false;
+      } else {
+        cw.init(ctx->cache.buffer, ctx->cache.bytesPerRow, ctx->cache.bandRows, ctx->cache.originX);
+        cw.beginRow(outY, ctx->config->y + ctx->cache.bandStart);
+      }
+    }
+    const bool useDithering = ctx->config->useDithering;
+    const uint8_t ditherMode = ctx->config->ditherMode;
+    for (int dstX = 0; dstX < dstWidth; dstX++) {
+      const int outX = ctx->config->x + dstX;
+      if (outX >= ctx->screenWidth) break;
+      const uint8_t gray = static_cast<uint8_t>(ctx->boxSum[dstX] / static_cast<uint32_t>(ctx->boxRows));
+      const uint8_t dithered = useDithering ? applyPanelDither(gray, outX, outY, ditherMode) : (gray >> 6);
+      pw.writePixel(outX, dithered, false);
+      if (caching) cw.writePixel(outX, dithered);
+    }
+  }
+  for (int i = 0; i < dstWidth; i++) ctx->boxSum[i] = 0;
+  ctx->boxRows = 0;
+  ctx->lastDstY = dstY;
+}
+
 int pngDrawCallback(PNGDRAW* pDraw) {
   PngContext* ctx = reinterpret_cast<PngContext*>(pDraw->pUser);
   if (!ctx || !ctx->config || !ctx->renderer || !ctx->grayLineBuffer) return 0;
@@ -222,6 +265,29 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   int srcWidth = ctx->srcWidth;
   if (srcY < ctx->cropTop || srcY >= ctx->cropTop + ctx->visibleHeight) return 1;
   const int visibleSrcY = srcY - ctx->cropTop;
+
+  if (ctx->boxSum) {
+    const int dstY = std::min((visibleSrcY * ctx->dstHeight) / ctx->visibleHeight, ctx->dstHeight - 1);
+    if (dstY != ctx->boxDstY) {
+      emitBoxRow(ctx);
+      ctx->boxDstY = dstY;
+    }
+    convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->iBpp, pDraw->pPalette,
+                      pDraw->iHasAlpha, 0, nullptr);
+    const int vw = ctx->visibleWidth;
+    const int dw = ctx->dstWidth;
+    for (int dstX = 0; dstX < dw; dstX++) {
+      const int x0 = ctx->cropLeft + (dstX * vw) / dw;
+      int x1 = ctx->cropLeft + ((dstX + 1) * vw) / dw;
+      if (x1 <= x0) x1 = x0 + 1;
+      if (x1 > ctx->cropLeft + vw) x1 = ctx->cropLeft + vw;
+      uint32_t sum = 0;
+      for (int x = x0; x < x1; x++) sum += ctx->grayLineBuffer[x];
+      ctx->boxSum[dstX] += sum / static_cast<uint32_t>(x1 - x0);
+    }
+    ctx->boxRows++;
+    return 1;
+  }
 
   // Map source rows with the exact output-height ratio. During downscaling,
   // multiple source rows can select the same output row; during upscaling, one
@@ -289,7 +355,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
           uint8_t ditheredGray;
           if (useDithering) {
-            ditheredGray = applyPanelDither(gray, outX, outY);
+            ditheredGray = applyPanelDither(gray, outX, outY, ctx->config->ditherMode);
           } else {
             ditheredGray = gray >> 6;
           }
@@ -448,6 +514,17 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.grayLineBuffer = lineBuffers.get();
   ctx.alphaLineBuffer = retainAlpha ? ctx.grayLineBuffer + grayBufSize : nullptr;
 
+  // Diptyx opaque downscale: average the source rows under each output row.
+  std::unique_ptr<uint32_t[]> boxSum;
+  if (BoardConfig::isDiptyx() && !retainAlpha && ctx.dstHeight <= ctx.visibleHeight &&
+      ctx.dstWidth <= ctx.visibleWidth && ctx.dstWidth > 0) {
+    boxSum = makeUniqueNoThrow<uint32_t[]>(static_cast<size_t>(ctx.dstWidth));
+    if (boxSum) {
+      for (int i = 0; i < ctx.dstWidth; i++) boxSum[i] = 0;
+      ctx.boxSum = boxSum.get();
+    }
+  }
+
   // Stream the pixel cache to disk. PNGdec delivers source scanlines top to
   // bottom and we emit at most one (downscaled) output row per callback, so the
   // band only needs a single row. Streaming keeps the working set tiny, so
@@ -476,6 +553,8 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
 
+  emitBoxRow(&ctx);  // the last output row
+  ctx.boxSum = nullptr;
   LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 
   // Finalize the streamed cache (caching may have been cleared on a flush error).

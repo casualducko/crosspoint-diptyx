@@ -106,7 +106,12 @@ power button).
 - **Sleep and power-off:** after the idle timeout (or from the menu) it goes into standby sleep, and the page buttons and the center button wake it;
   the power button does not. Holding the power button for about 3 seconds powers it off completely (on battery; with the cable plugged in it
   only goes to standby). After a power-off, wait about 20 seconds, then press the power button to turn it on; if a tap does nothing, hold it
-  for about 3 seconds.
+  for about 3 seconds. You can also use *Settings > System > Power Off* (same thing). With USB attached the battery rail cannot be cut, so the
+  Diptyx only goes to standby (it says so); unplug the cable for a full power-off.
+- **Comics, manga and other images (Settings > Reader > Image Dithering):** the panels show only black and white, so every picture is dithered. Pictures
+  that are larger than the screen are shrunk by averaging, which keeps thin lines and screentone. *Ordered* is a regular pattern (the default),
+  *Blue Noise* is a smoother, less patterned look that often suits photos and shaded art, and *Line Art* is a plain threshold: crisp lines and
+  text with no gray tones, best for plain black-and-white manga. The choice applies to the next image page you draw.
 - **USB drive:** *File Transfer > USB Drive*, connect the cable, and the SD card appears on your computer. Eject it to return to the home screen.
 - **Sleep screens (Settings > Display):** each screen has its own. *Left Sleep Screen* offers Dark, Light, Custom, Cover and more; *Right Sleep Screen*
   offers Idle Image, Title & Author, Cover, Dark, Light and None. *Left Image Fit* and *Right Image Fit* decide how a picture is placed: **Fit** shows all of it

@@ -136,6 +136,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (stride <= 0 || blockH <= 0 || validW <= 0) return 1;
 
   const bool useDithering = ctx->config->useDithering;
+  const uint8_t ditherMode = ctx->config->ditherMode;
   bool caching = ctx->caching;
   const int32_t fineScaleFPX = ctx->fineScaleFPX;
   const int32_t invScaleFPX = ctx->invScaleFPX;
@@ -202,7 +203,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         uint8_t gray = row[dstX - blockX];
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY);
+          dithered = applyPanelDither(gray, outX, outY, ditherMode);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -261,7 +262,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY);
+          dithered = applyPanelDither(gray, outX, outY, ditherMode);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -284,7 +285,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY);
+          dithered = applyPanelDither(gray, outX, outY, ditherMode);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -310,7 +311,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY);
+          dithered = applyPanelDither(gray, outX, outY, ditherMode);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -322,7 +323,10 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
     return 1;
   }
 
-  // === Nearest-neighbor (downscale: fineScale < 1.0) ===
+  // === Downscale (fineScale < 1.0) ===
+  // The Diptyx averages every source pixel under an output pixel (inside this block), which keeps thin lines and
+  // screentone intact; other boards keep nearest-neighbor sampling.
+  const bool boxFilter = BoardConfig::isDiptyx();
   for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
     const int outY = cfgY + dstY;
     pw.beginRow(outY);
@@ -331,6 +335,12 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
     int ly = (srcFyFP >> FP_SHIFT) - blockY;
     if (ly < 0) ly = 0;
     if (ly >= blockH) ly = blockH - 1;
+    int lyEnd = ly + 1;
+    if (boxFilter) {
+      lyEnd = (int)(((int64_t)(dstY + 1) * invScaleFPY) >> FP_SHIFT) - blockY;
+      if (lyEnd <= ly) lyEnd = ly + 1;
+      if (lyEnd > blockH) lyEnd = blockH;
+    }
     const uint8_t* row = &pixels[ly * stride];
 
     for (int dstX = dstXStart; dstX < dstXEnd; dstX++) {
@@ -339,11 +349,28 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
       int lx = (srcFxFP >> FP_SHIFT) - blockX;
       if (lx < 0) lx = 0;
       if (lx >= validW) lx = validW - 1;
-      uint8_t gray = row[lx];
+      uint8_t gray;
+      if (boxFilter) {
+        int lxEnd = (int)(((int64_t)(dstX + 1) * invScaleFPX) >> FP_SHIFT) - blockX;
+        if (lxEnd <= lx) lxEnd = lx + 1;
+        if (lxEnd > validW) lxEnd = validW;
+        if (lxEnd - lx == 1 && lyEnd - ly == 1) {
+          gray = row[lx];
+        } else {
+          uint32_t sum = 0;
+          for (int yy = ly; yy < lyEnd; yy++) {
+            const uint8_t* r = &pixels[yy * stride];
+            for (int xx = lx; xx < lxEnd; xx++) sum += r[xx];
+          }
+          gray = (uint8_t)(sum / (uint32_t)((lxEnd - lx) * (lyEnd - ly)));
+        }
+      } else {
+        gray = row[lx];
+      }
 
       uint8_t dithered;
       if (useDithering) {
-        dithered = applyPanelDither(gray, outX, outY);
+        dithered = applyPanelDither(gray, outX, outY, ditherMode);
       } else {
         dithered = gray / 85;
         if (dithered > 3) dithered = 3;

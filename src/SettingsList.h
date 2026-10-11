@@ -316,6 +316,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Enum(StrId::STR_IMAGE_DITHER, &CrossPointSettings::imageDither,
+                          {StrId::STR_DITHER_ORDERED, StrId::STR_DITHER_BLUE_NOISE, StrId::STR_DITHER_THRESHOLD},
+                          "imageDither", StrId::STR_CAT_READER),
         SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
@@ -540,6 +543,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // The right-screen sleep choice needs the Diptyx's second panel.
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_SLEEP_SCREEN);
     if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_RIGHT_IMAGE_FIT);
+    // Page images are 1-bit on the Diptyx only, so only it has a dither choice.
+    if (!BoardConfig::isDiptyx()) eraseEntry(StrId::STR_IMAGE_DITHER);
     // Quick Resume on Timeout is not verified on the Diptyx (two panels, wake is a reboot), so it is hidden there.
     if (BoardConfig::isDiptyx()) eraseEntry(StrId::STR_QUICK_RESUME_TIMEOUT);
     // The Diptyx reads in portrait with a spread, so front buttons never follow an orientation.

@@ -17,6 +17,7 @@ struct RenderConfig {
   int maxWidth, maxHeight;
   bool useGrayscale = true;
   bool useDithering = true;
+  uint8_t ditherMode = 0;           // Diptyx 1-bit dither pattern (DitherUtils.h PANEL_DITHER_*)
   bool performanceMode = false;
   bool useExactDimensions = false;  // If true, use maxWidth/maxHeight as exact output size (no recalculation)
   float sourceCropX = 0.0f;         // Fraction cropped equally from the left and right edges

@@ -31,6 +31,7 @@ enum class SettingAction {
   HomeButton,
   About,
   Restart,
+  PowerOff,
 };
 
 struct SettingInfo {

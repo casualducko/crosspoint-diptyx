@@ -4,6 +4,8 @@
 #include <BoardConfig.h>
 #include <stdint.h>
 
+#include "BlueNoise64.h"
+
 // 4x4 Bayer matrix for ordered dithering
 inline const uint8_t bayer4x4[4][4] = {
     {0, 8, 2, 10},
@@ -50,7 +52,27 @@ inline uint8_t applyBayerDither1Bit(uint8_t gray, int x, int y) {
   return stretched >= bayer8x8[y & 7][x & 7] * 4 + 2 ? 3 : 0;
 }
 
-// The dither for the active panel: 1-bit on the Diptyx, 4 gray levels elsewhere.
-inline uint8_t applyPanelDither(uint8_t gray, int x, int y) {
-  return BoardConfig::isDiptyx() ? applyBayerDither1Bit(gray, x, y) : applyBayerDither4Level(gray, x, y);
+// Image dither choices on the Diptyx; the values match CrossPointSettings::IMAGE_DITHER.
+constexpr uint8_t PANEL_DITHER_ORDERED = 0;     // 8x8 Bayer: even, regular pattern
+constexpr uint8_t PANEL_DITHER_BLUE_NOISE = 1;  // blue-noise threshold: smooth, no visible pattern
+constexpr uint8_t PANEL_DITHER_THRESHOLD = 2;   // plain threshold: crisp line art and text, no tones
+
+// Same tone curve and 40..224 stretch as applyBayerDither1Bit(), compared against a 64x64 blue-noise table.
+inline uint8_t applyBlueNoiseDither1Bit(uint8_t gray, int x, int y) {
+  const int tone = bwToneCurve(gray);
+  const int stretched = tone <= 40 ? 0 : (tone >= 224 ? 255 : ((tone - 40) * 355) >> 8);
+  return stretched >= blueNoise64[((y & 63) << 6) | (x & 63)] ? 3 : 0;
+}
+
+// The dither for the active panel: 1-bit on the Diptyx (mode picks the pattern), 4 gray levels elsewhere.
+inline uint8_t applyPanelDither(uint8_t gray, int x, int y, uint8_t mode = PANEL_DITHER_ORDERED) {
+  if (!BoardConfig::isDiptyx()) return applyBayerDither4Level(gray, x, y);
+  switch (mode) {
+    case PANEL_DITHER_BLUE_NOISE:
+      return applyBlueNoiseDither1Bit(gray, x, y);
+    case PANEL_DITHER_THRESHOLD:
+      return gray >= 140 ? 3 : 0;
+    default:
+      return applyBayerDither1Bit(gray, x, y);
+  }
 }

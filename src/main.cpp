@@ -33,6 +33,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "PowerOffRequest.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
@@ -174,6 +175,8 @@ enum class BootResume : uint8_t {
   Silent,          // heap-defrag ESP.restart() (RTC flag; lost on power loss)
   SplashlessWake,  // wake from deep sleep with the splash suppressed by the SD flag
 };
+
+volatile bool powerOffRequested = false;  // see PowerOffRequest.h
 
 // Latched true once enterDeepSleep() commits to sleeping, before it tears down
 // the current activity. WiFi activities call silentRestart() in onExit() to
@@ -955,6 +958,12 @@ void loop() {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
+  if (powerOffRequested) {  // Settings > System > Power Off
+    powerOffRequested = false;
+    enterDeepSleep(false, BoardConfig::isDiptyx());
     return;
   }
 

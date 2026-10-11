@@ -27,6 +27,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
+#include "PowerOffRequest.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -121,6 +122,7 @@ void SettingsActivity::rebuildSettingsLists() {
   // The Diptyx has no reset button or X4-style button combination, so offer a deliberate restart here.
   if (BoardConfig::isDiptyx()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_RESTART_DEVICE, SettingAction::Restart));
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_POWER_OFF_ACTION, SettingAction::PowerOff));
   }
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
@@ -463,6 +465,17 @@ void SettingsActivity::toggleCurrentSetting() {
         GUI.drawPopup(renderer, tr(STR_RESTARTING));  // one-line popup: the long hint text does not fit
         delay(50);
         ESP.restart();
+        break;
+      }
+      case SettingAction::PowerOff: {
+        // Same path as holding the power button: the sleep screens, then the battery latch is released. With USB
+        // attached the rail cannot be cut, so say that the board only goes to standby.
+        {
+          RenderLock lock;
+          GUI.drawPopup(renderer, gpio.isUsbConnected() ? tr(STR_POWER_OFF_USB) : tr(STR_POWERING_OFF));
+        }
+        delay(gpio.isUsbConnected() ? 1500 : 50);
+        powerOffRequested = true;
         break;
       }
       case SettingAction::None:
