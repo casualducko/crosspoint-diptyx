@@ -27,7 +27,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     GO_HOME,
     SYNC,
     DELETE_CACHE,
-    DICTIONARY
+    DICTIONARY,
+    IMAGE_DITHER  // Diptyx: picks the image dither inside the menu, like Night Mode
   };
 
   struct MenuItem {
@@ -75,6 +76,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   uint8_t selectedPageTurnOption = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
+  const std::vector<StrId> ditherLabels = {StrId::STR_DITHER_ORDERED, StrId::STR_DITHER_BLUE_NOISE,
+                                           StrId::STR_DITHER_THRESHOLD, StrId::STR_DITHER_COMICS};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;

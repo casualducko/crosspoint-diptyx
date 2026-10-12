@@ -5,6 +5,8 @@
 #include <HalFrontlight.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
@@ -50,6 +52,7 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
   }
   items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   items.push_back({MenuAction::NIGHT_MODE, StrId::STR_NIGHT_MODE});
+  if (BoardConfig::isDiptyx()) items.push_back({MenuAction::IMAGE_DITHER, StrId::STR_IMAGE_DITHER});
   if (Frontlight.present()) {
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
   }
@@ -105,6 +108,18 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
     optionPopup.show(I18N.get(StrId::STR_AUTO_TURN_PAGES_PER_MIN), pageTurnLabels.data(),
                      static_cast<int>(pageTurnLabels.size()), selectedPageTurnOption, [this](int idx) {
                        selectedPageTurnOption = idx;
+                       requestUpdate();
+                     });
+    requestUpdate();
+    return;
+  }
+
+  if (selectedAction == MenuAction::IMAGE_DITHER) {
+    // Applied and saved at once; the reader redraws its pages when the menu closes.
+    optionPopup.show(StrId::STR_IMAGE_DITHER, ditherLabels.data(), static_cast<int>(ditherLabels.size()),
+                     SETTINGS.imageDither, [this](int idx) {
+                       SETTINGS.imageDither = static_cast<uint8_t>(idx);
+                       SETTINGS.saveToFile();
                        requestUpdate();
                      });
     requestUpdate();
@@ -178,6 +193,8 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
       menuRowItems[i].value = I18N.get(orientationLabels[pendingOrientation]);
     } else if (action == MenuAction::AUTO_PAGE_TURN) {
       menuRowItems[i].value = pageTurnLabels[selectedPageTurnOption];
+    } else if (action == MenuAction::IMAGE_DITHER) {
+      menuRowItems[i].value = I18N.get(ditherLabels[std::min<size_t>(SETTINGS.imageDither, ditherLabels.size() - 1)]);
     } else if (action == MenuAction::NIGHT_MODE) {
       GUI.setCheckboxRow(menuRowItems[i], SETTINGS.screenInverted);
     } else if (action == MenuAction::FRONTLIGHT) {

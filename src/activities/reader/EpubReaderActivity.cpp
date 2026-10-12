@@ -304,11 +304,16 @@ void EpubReaderActivity::openReaderMenu() {
   const ChapterPosition position = chapterPosition();
   const int bookProgressPercent = bookPercentFor(position);
 
+  const uint8_t ditherBefore = SETTINGS.imageDither;
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
                              bookProgressPercent, SETTINGS.orientation, pageHasFootnotes(), !cachedBookmarks.empty()),
-                         [this](const ActivityResult& result) {
+                         [this, ditherBefore](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
+
+                           // The menu's Image Dithering row changed it: the right page's key does not cover the dither,
+                           // so redraw it (the left page is redrawn by the render that follows).
+                           if (SETTINGS.imageDither != ditherBefore) rightPageKey = 0;
 
                            if (SETTINGS.orientation != menu.orientation) {
                              applyOrientation(menu.orientation);
@@ -1019,6 +1024,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       addBookmark();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::IMAGE_DITHER:
+      break;  // handled inside the list menu; the toolbar's More panel does not offer it
   }
 }
 
@@ -2749,7 +2756,8 @@ void EpubReaderActivity::buildMoreActions() {
   EpubReaderMenuActivity::buildMenuItems(moreItems, pageHasFootnotes(), !cachedBookmarks.empty());
   moreItems.erase(std::remove_if(moreItems.begin(), moreItems.end(),
                                  [](const auto& item) {
-                                   return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS;
+                                   return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS ||
+                                          item.action == MA::IMAGE_DITHER;
                                  }),
                   moreItems.end());
 }
