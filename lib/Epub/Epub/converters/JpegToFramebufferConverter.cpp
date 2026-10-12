@@ -11,6 +11,7 @@
 #include <memory>
 #include <new>
 
+#include "ComicsFrame.h"
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
@@ -46,6 +47,8 @@ struct JpegContext {
 
   PixelCache cache;
   bool caching{false};
+  // Comics dither: the downscaled gray of the whole page (dstWidth x dstHeight), halftoned once the decode is done.
+  uint8_t* frame{nullptr};
 
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
 };
@@ -120,6 +123,20 @@ constexpr int FP_SHIFT = 16;
 constexpr int32_t FP_ONE = 1 << FP_SHIFT;
 constexpr int32_t FP_MASK = FP_ONE - 1;
 
+// The 1-bit value for one output pixel. In Comics mode it only records the gray (the page is halftoned once the decode
+// is done) and returns white as a placeholder for the framebuffer.
+inline uint8_t ditherPixel(const JpegContext* ctx, const uint8_t gray, const int outX, const int outY) {
+  if (ctx->frame) {
+    const int dstX = outX - ctx->config->x;
+    const int dstY = outY - ctx->config->y;
+    if (dstX >= 0 && dstX < ctx->dstWidth && dstY >= 0 && dstY < ctx->dstHeight) {
+      ctx->frame[static_cast<size_t>(dstY) * static_cast<size_t>(ctx->dstWidth) + dstX] = gray;
+    }
+    return 3;
+  }
+  return applyPanelDither(gray, outX, outY, ctx->config->ditherMode);
+}
+
 int jpegDrawCallback(JPEGDRAW* pDraw) {
   JpegContext* ctx = reinterpret_cast<JpegContext*>(pDraw->pUser);
   if (!ctx || !ctx->config || !ctx->renderer) return 0;
@@ -136,7 +153,6 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (stride <= 0 || blockH <= 0 || validW <= 0) return 1;
 
   const bool useDithering = ctx->config->useDithering;
-  const uint8_t ditherMode = ctx->config->ditherMode;
   bool caching = ctx->caching;
   const int32_t fineScaleFPX = ctx->fineScaleFPX;
   const int32_t invScaleFPX = ctx->invScaleFPX;
@@ -203,7 +219,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         uint8_t gray = row[dstX - blockX];
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY, ditherMode);
+          dithered = ditherPixel(ctx, gray, outX, outY);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -262,7 +278,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY, ditherMode);
+          dithered = ditherPixel(ctx, gray, outX, outY);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -285,7 +301,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY, ditherMode);
+          dithered = ditherPixel(ctx, gray, outX, outY);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -311,7 +327,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyPanelDither(gray, outX, outY, ditherMode);
+          dithered = ditherPixel(ctx, gray, outX, outY);
         } else {
           dithered = gray / 85;
           if (dithered > 3) dithered = 3;
@@ -370,7 +386,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
       uint8_t dithered;
       if (useDithering) {
-        dithered = applyPanelDither(gray, outX, outY, ditherMode);
+        dithered = ditherPixel(ctx, gray, outX, outY);
       } else {
         dithered = gray / 85;
         if (dithered > 3) dithered = 3;
@@ -509,7 +525,14 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   // Start streaming the pixel cache to disk. The band only needs to hold the
   // tallest single decode block: a JPEGDEC MCU cell is at most 16 scaled-source
   // rows tall, which our fine scale maps to this many output rows.
-  ctx.caching = !config.cachePath.empty();
+  // Comics dither: collect the page instead of dithering blocks; without memory it dithers per pixel as usual.
+  ComicsHalftone::FramePtr comicsFrame;
+  if (ComicsFrame::wanted(config)) {
+    comicsFrame = ComicsFrame::makeFrame(destWidth, destHeight);
+    ctx.frame = comicsFrame.get();
+  }
+
+  ctx.caching = !config.cachePath.empty() && !ctx.frame;  // the Comics page is cached by finish()
   if (ctx.caching) {
     const int maxBlockDstRows = (int)(((int64_t)16 * ctx.fineScaleFPY) >> FP_SHIFT) + 2;
     if (!ctx.cache.begin(config.cachePath, destWidth, destHeight, config.x, config.y, maxBlockDstRows)) {
@@ -530,6 +553,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   }
 
   LOG_DBG("JPG", "JPEG decoding complete - render time: %lu ms", decodeTime);
+  if (ctx.frame) {
+    ComicsFrame::finish(renderer, config, ctx.frame, destWidth, destHeight, ctx.screenWidth, ctx.screenHeight);
+    ctx.frame = nullptr;
+  }
 
   // Finalize the streamed cache file. Note: a flush failure mid-decode clears
   // ctx.caching (the partial file is dropped), so re-read the flag here.

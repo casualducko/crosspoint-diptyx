@@ -287,7 +287,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // How an image or cover is placed on the right sleep screen (the left uses sleepScreenCoverMode).
   uint8_t rightImageFit = FIT;
   // Diptyx only: how page images are turned into black and white (the values match DitherUtils.h PANEL_DITHER_*).
-  enum IMAGE_DITHER { DITHER_ORDERED = 0, DITHER_BLUE_NOISE = 1, DITHER_THRESHOLD = 2, IMAGE_DITHER_COUNT };
+  enum IMAGE_DITHER {
+    DITHER_ORDERED = 0,
+    DITHER_BLUE_NOISE = 1,
+    DITHER_THRESHOLD = 2,
+    DITHER_COMICS = 3,
+    IMAGE_DITHER_COUNT
+  };
   uint8_t imageDither = DITHER_ORDERED;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
@@ -316,7 +322,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
-  // Diptyx only: Bold lays the body text out in the family's bold faces (bold words stay bold, italics become bold italic).
+  // Diptyx only: Bold lays the body text out in the family's bold faces (bold words stay bold, italics become bold
+  // italic).
   enum FONT_WEIGHT { WEIGHT_REGULAR = 0, WEIGHT_BOLD = 1, FONT_WEIGHT_COUNT };
   uint8_t fontWeight = WEIGHT_REGULAR;
   uint8_t lineSpacing = NORMAL;

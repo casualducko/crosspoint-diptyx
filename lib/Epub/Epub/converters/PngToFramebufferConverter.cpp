@@ -12,6 +12,7 @@
 #include <memory>
 #include <new>
 
+#include "ComicsFrame.h"
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
@@ -49,6 +50,8 @@ struct PngContext {
   // Diptyx opaque downscale: every source row under an output row is averaged (sums of per-row horizontal averages),
   // instead of keeping only the first source row. Null when the plain row-skipping path is used.
   uint32_t* boxSum{nullptr};
+  // Comics dither: the averaged gray rows of the whole page (dstWidth x dstHeight), halftoned once the decode is done.
+  uint8_t* frame{nullptr};
   int boxDstY{-1};  // output row being built
   int boxRows{0};   // source rows added to it
 };
@@ -224,6 +227,17 @@ void emitBoxRow(PngContext* ctx) {
   const int dstY = ctx->boxDstY;
   const int outY = ctx->config->y + dstY;
   const int dstWidth = ctx->dstWidth;
+  if (ctx->frame) {
+    // Comics: keep the averaged row; the page is halftoned and written once it is complete (ComicsFrame::finish()).
+    uint8_t* row = ctx->frame + static_cast<size_t>(dstY) * static_cast<size_t>(dstWidth);
+    for (int dstX = 0; dstX < dstWidth; dstX++) {
+      row[dstX] = static_cast<uint8_t>(ctx->boxSum[dstX] / static_cast<uint32_t>(ctx->boxRows));
+      ctx->boxSum[dstX] = 0;
+    }
+    ctx->boxRows = 0;
+    ctx->lastDstY = dstY;
+    return;
+  }
   if (outY < ctx->screenHeight) {
     DirectPixelWriter pw;
     pw.init(*ctx->renderer);
@@ -527,13 +541,22 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     }
   }
 
+  // Comics dither: collect the page instead of dithering rows (needs the box-filtered rows above); without memory it
+  // dithers per pixel as usual.
+  ComicsHalftone::FramePtr comicsFrame;
+  if (ctx.boxSum && ComicsFrame::wanted(config)) {
+    comicsFrame = ComicsFrame::makeFrame(ctx.dstWidth, ctx.dstHeight);
+    ctx.frame = comicsFrame.get();
+  }
+
   // Stream the pixel cache to disk. PNGdec delivers source scanlines top to
   // bottom and we emit at most one (downscaled) output row per callback, so the
   // band only needs a single row. Streaming keeps the working set tiny, so
   // unlike the old full-image buffer it neither competes with the ~44KB decoder
   // nor forces larger images to skip caching - which previously meant a full
   // re-decode on every one of an image page's ~14 render passes.
-  ctx.caching = !config.preserveAlpha && !config.cachePath.empty();
+  ctx.caching =
+      !config.preserveAlpha && !config.cachePath.empty() && !ctx.frame;  // the Comics page is cached by finish()
   if (ctx.caching) {
     if (!ctx.cache.begin(config.cachePath, ctx.dstWidth, ctx.dstHeight, config.x, config.y, 1)) {
       LOG_ERR("PNG", "Failed to start cache stream, continuing without caching");
@@ -557,6 +580,10 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   emitBoxRow(&ctx);  // the last output row
   ctx.boxSum = nullptr;
+  if (ctx.frame) {
+    ComicsFrame::finish(renderer, config, ctx.frame, ctx.dstWidth, ctx.dstHeight, ctx.screenWidth, ctx.screenHeight);
+    ctx.frame = nullptr;
+  }
   LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 
   // Finalize the streamed cache (caching may have been cleared on a flush error).

@@ -113,7 +113,9 @@ power button).
 - **Comics, manga and other images (Settings > Reader > Image Dithering):** the panels show only black and white, so every picture is dithered. Pictures
   that are larger than the screen are shrunk by averaging, which keeps thin lines and screentone. *Ordered* is a regular pattern (the default),
   *Blue Noise* is a smoother, less patterned look that often suits photos and shaded art, and *Line Art* is a plain threshold: crisp lines and
-  text with no gray tones, best for plain black-and-white manga. The choice applies to the next image page you draw.
+  text with no gray tones, best for plain black-and-white manga. *Comics* sharpens the page first and keeps lettering and line art solid
+  (even small or on yellowed scans) while still showing shading and gradients as a halftone; it is the one to try when speech bubbles are hard to read.
+  The choice applies to the next image page you draw.
 - **USB drive:** *File Transfer > USB Drive*, connect the cable, and the SD card appears on your computer. Eject it to return to the home screen.
 - **Sleep screens (Settings > Display):** each screen has its own. *Left Sleep Screen* offers Dark, Light, Custom, Cover and more; *Right Sleep Screen*
   offers Idle Image, Title & Author, Cover, Dark, Light and None. *Left Image Fit* and *Right Image Fit* decide how a picture is placed: **Fit** shows all of it

@@ -317,7 +317,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Enum(StrId::STR_IMAGE_DITHER, &CrossPointSettings::imageDither,
-                          {StrId::STR_DITHER_ORDERED, StrId::STR_DITHER_BLUE_NOISE, StrId::STR_DITHER_THRESHOLD},
+                          {StrId::STR_DITHER_ORDERED, StrId::STR_DITHER_BLUE_NOISE, StrId::STR_DITHER_THRESHOLD,
+                           StrId::STR_DITHER_COMICS},
                           "imageDither", StrId::STR_CAT_READER),
         SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
                             StrId::STR_CAT_READER)
@@ -388,11 +389,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, dualPanel ? StrId::STR_POWER_OFF_ACTION : StrId::STR_SLEEP, StrId::STR_PAGE_TURN,
-             StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, dualPanel ? StrId::STR_POWER_OFF_ACTION : StrId::STR_SLEEP,
+                           StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
         // Erased below unless the QMI8658 IMU is present (X3).
         SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,

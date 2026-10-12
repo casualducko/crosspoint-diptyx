@@ -32,14 +32,9 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
 
 // 8x8 Bayer matrix (0..63) for the 1-bit ordered dither below.
 inline const uint8_t bayer8x8[8][8] = {
-    { 0, 32,  8, 40,  2, 34, 10, 42},
-    {48, 16, 56, 24, 50, 18, 58, 26},
-    {12, 44,  4, 36, 14, 46,  6, 38},
-    {60, 28, 52, 20, 62, 30, 54, 22},
-    { 3, 35, 11, 43,  1, 33,  9, 41},
-    {51, 19, 59, 27, 49, 17, 57, 25},
-    {15, 47,  7, 39, 13, 45,  5, 37},
-    {63, 31, 55, 23, 61, 29, 53, 21},
+    {0, 32, 8, 40, 2, 34, 10, 42},    {48, 16, 56, 24, 50, 18, 58, 26}, {12, 44, 4, 36, 14, 46, 6, 38},
+    {60, 28, 52, 20, 62, 30, 54, 22}, {3, 35, 11, 43, 1, 33, 9, 41},    {51, 19, 59, 27, 49, 17, 57, 25},
+    {15, 47, 7, 39, 13, 45, 5, 37},   {63, 31, 55, 23, 61, 29, 53, 21},
 };
 
 // Black-and-white panel: tone-curve the gray, stretch 40..224 to 0..255 (the range the home-screen cover's Atkinson
@@ -56,6 +51,7 @@ inline uint8_t applyBayerDither1Bit(uint8_t gray, int x, int y) {
 constexpr uint8_t PANEL_DITHER_ORDERED = 0;     // 8x8 Bayer: even, regular pattern
 constexpr uint8_t PANEL_DITHER_BLUE_NOISE = 1;  // blue-noise threshold: smooth, no visible pattern
 constexpr uint8_t PANEL_DITHER_THRESHOLD = 2;   // plain threshold: crisp line art and text, no tones
+constexpr uint8_t PANEL_DITHER_COMICS = 3;      // whole-page halftone (ComicsHalftone.h): lettering and shading
 
 // Same tone curve and 40..224 stretch as applyBayerDither1Bit(), compared against a 64x64 blue-noise table.
 inline uint8_t applyBlueNoiseDither1Bit(uint8_t gray, int x, int y) {
@@ -72,6 +68,8 @@ inline uint8_t applyPanelDither(uint8_t gray, int x, int y, uint8_t mode = PANEL
       return applyBlueNoiseDither1Bit(gray, x, y);
     case PANEL_DITHER_THRESHOLD:
       return gray >= 140 ? 3 : 0;
+    case PANEL_DITHER_COMICS:  // halftoned per page by ComicsFrame; a caller that cannot collect the page gets the
+                               // ordered dither
     default:
       return applyBayerDither1Bit(gray, x, y);
   }
