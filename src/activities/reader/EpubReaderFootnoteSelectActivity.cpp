@@ -168,6 +168,10 @@ void EpubReaderFootnoteSelectActivity::render(RenderLock&&) {
 
   // Render the page underneath
   if (page) {
+    // An image on the page may claim the pixel-cache slot (up to 96 KB); release it when the page is drawn.
+    struct PxcSlotGuard {
+      ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+    } pxcSlotGuard;
     page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
   }
 

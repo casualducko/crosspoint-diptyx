@@ -389,6 +389,11 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   // the in-RAM glyph cache during the real draw.
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
+  // An image on the page may claim the pixel-cache slot (up to 96 KB); release it so it does not stay resident under
+  // the definition screen.
+  struct PxcSlotGuard {
+    ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+  } pxcSlotGuard;
   page->render(renderer, fontId, marginLeft, marginTop);
   scope.endScanAndPrewarm();
   page->render(renderer, fontId, marginLeft, marginTop);
