@@ -2194,11 +2194,13 @@ void EpubReaderActivity::discardOverlayPage() {
 }
 
 bool EpubReaderActivity::showBookmarkPopupOnly() {
-  if (!BoardConfig::isDiptyx() || !section || overlay != Overlay::None || overlayPageStored) return false;
+  if (!BoardConfig::isDiptyx()) return false;
   // Right to left the bookmark icon is on the right panel, which a popup over the left frame never redraws: take the
   // full render instead.
   if (spreadRtl()) return false;
   RenderLock lock;
+  // Checked under the lock: a render that ran first may have reset the section or taken over the stored-frame slot.
+  if (!section || overlay != Overlay::None || overlayPageStored) return false;
   if (!renderer.storeBwBuffer()) return false;
   overlayPageStored = true;
   bookmarkPopupStored = true;

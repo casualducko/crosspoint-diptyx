@@ -90,6 +90,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 52
+
+No layout change: the Diptyx now reads the stylesheet for italic and bold even with Embedded Style off, so sections
+built by version 51 are rebuilt.
+
 ### Version 51
 
 The header adds a `boldBody` flag (`bool`) after `wordSpacingPercent`. It participates in cache validation, so
