@@ -464,14 +464,43 @@ static void holdPowerLatchThroughRestart() {
   gpio_hold_en(static_cast<gpio_num_t>(pin));
 }
 
+// Diptyx: keep the latch pad held for the whole run. The shutdown handler above only covers esp_restart(); a panic,
+// abort(), watchdog or lockup reset skips it, and the unheld pin falls back to its input default, which powers a
+// battery-powered board off instead of rebooting it. The pad hold survives those resets. Every power-off path releases
+// it first (HalPowerManager::startDeepSleep(), powerFailsafeTask()). It is not armed after a brownout reset, or after
+// CRASH_LOOP_LIMIT crash resets in a row, so a board that keeps failing still ends up powered off instead of looping
+// until the battery is flat. DIPTYX_NO_LATCH_HOLD builds leave it out (crash test baseline).
+static constexpr uint32_t CRASH_STREAK_MAGIC = 0x43525348;  // "CRSH"
+static constexpr uint32_t CRASH_LOOP_LIMIT = 3;
+static constexpr unsigned long CRASH_STREAK_HEALTHY_MS = 30000;
+RTC_NOINIT_ATTR static uint32_t crashStreakMagic;
+RTC_NOINIT_ATTR static uint32_t crashStreak;
+
+static void armPowerLatchHold() {
+  const auto reason = esp_reset_reason();
+  const bool crashReset = reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || reason == ESP_RST_TASK_WDT ||
+                          reason == ESP_RST_WDT || reason == ESP_RST_CPU_LOCKUP;
+  if (crashStreakMagic != CRASH_STREAK_MAGIC) {  // RTC_NOINIT memory is undefined after a power-on
+    crashStreakMagic = CRASH_STREAK_MAGIC;
+    crashStreak = 0;
+  }
+  crashStreak = crashReset ? crashStreak + 1 : 0;
+
+#ifndef DIPTYX_NO_LATCH_HOLD
+  const int8_t pin = BoardConfig::ACTIVE.power.latch0;
+  if (pin < 0 || reason == ESP_RST_BROWNOUT || crashStreak > CRASH_LOOP_LIMIT) return;
+  gpio_hold_en(static_cast<gpio_num_t>(pin));  // holdPowerRails() has just driven it HIGH
+#endif
+}
+
 // Diptyx failsafe: holding the power button for POWER_FAILSAFE_MS powers the board off (restarts it when USB keeps it
 // powered) even if the app is frozen. A separate high-priority task watches only that button, so a deadlocked main
 // task cannot disable it. It arms only after the button has been seen released since boot (otherwise holding the
 // button for the ~3 s it takes to switch the device on could trigger it), and the normal power-button hold (shorter)
 // is untouched. If the whole chip is dead nothing in software can help.
 static constexpr uint32_t POWER_FAILSAFE_MS = 10000;
-// While the main task is still preparing to sleep (saving state, drawing the sleep screens), cutting power could corrupt
-// the SD card, so the failsafe waits longer; a main task that really is frozen there still gets cut off.
+// While the main task is still preparing to sleep (saving state, drawing the sleep screens), cutting power could
+// corrupt the SD card, so the failsafe waits longer; a main task that really is frozen there still gets cut off.
 static constexpr uint32_t POWER_FAILSAFE_SLEEPING_MS = 25000;
 static constexpr uint32_t POWER_FAILSAFE_POLL_MS = 100;
 
@@ -539,6 +568,7 @@ void setup() {
   BoardConfig::holdPowerRails();
   if (BoardConfig::isDiptyx()) {
     esp_register_shutdown_handler(holdPowerLatchThroughRestart);
+    armPowerLatchHold();
     xTaskCreate(powerFailsafeTask, "pwrfailsafe", 4096, nullptr, 20, nullptr);
   }
 
@@ -803,6 +833,34 @@ void setup() {
 }
 
 void loop() {
+  if (crashStreak != 0 && millis() > CRASH_STREAK_HEALTHY_MS) crashStreak = 0;  // this run is healthy
+#ifdef DIPTYX_CRASH_TEST
+  // Test builds only (envs diptyx-crash-test*, never shipped): holding the left button (GPIO5) for 3 s calls abort(),
+  // holding the right button (GPIO6) for 3 s disables interrupts and spins until the interrupt watchdog resets the
+  // chip. Run on battery: if the board comes back (splash) the latch survived the crash reset; if it goes dark it
+  // dropped.
+  static unsigned long crashHoldStart = 0;
+  static int crashHoldPin = -1;
+  const int crashPin = digitalRead(5) == LOW ? 5 : (digitalRead(6) == LOW ? 6 : -1);
+  if (crashPin >= 0) {
+    if (crashHoldPin != crashPin) {
+      crashHoldPin = crashPin;
+      crashHoldStart = millis();
+    }
+    if (millis() - crashHoldStart > 3000) {
+      if (crashPin == 5) {
+        esp_rom_printf("[TEST] abort()\n");
+        abort();
+      }
+      esp_rom_printf("[TEST] interrupt watchdog\n");
+      portDISABLE_INTERRUPTS();
+      for (;;) {
+      }
+    }
+  } else {
+    crashHoldPin = -1;
+  }
+#endif
 #ifdef DIPTYX_FAILSAFE_TEST
   // Test builds only (env diptyx-failsafe-test, never shipped): holding the left (page-left, GPIO5) button for 3 s
   // deadlocks the main task, so the power failsafe can be exercised.
