@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arduino.h>
 #include <BitmapHelpers.h>
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
@@ -15,8 +16,8 @@
 #include "ImageToFramebufferDecoder.h"
 #include "PixelCache.h"
 
-// The decoder side of the Comics dither (ComicsHalftone.h): while decoding, the converters keep the downscaled gray in a
-// frame buffer instead of dithering each pixel; finish() then halftones the whole page and writes it the way the
+// The decoder side of the Comics dither (ComicsHalftone.h): while decoding, the converters keep the downscaled gray in
+// a frame buffer instead of dithering each pixel; finish() then halftones the whole page and writes it the way the
 // per-pixel path would have: into the framebuffer and the pixel cache.
 namespace ComicsFrame {
 
@@ -32,23 +33,30 @@ inline ComicsHalftone::FramePtr makeFrame(const int width, const int height) {
   if (width <= 0 || height <= 0) return nullptr;
   const size_t bytes = static_cast<size_t>(width) * static_cast<size_t>(height);
   ComicsHalftone::FramePtr frame(ComicsHalftone::allocFrame(bytes));
-  if (frame) memset(frame.get(), 255, bytes);
-  else LOG_ERR("CMX", "OOM: %u byte comics frame, using the ordered dither", static_cast<unsigned>(bytes));
+  if (frame)
+    memset(frame.get(), 255, bytes);
+  else
+    LOG_ERR("CMX", "OOM: %u byte comics frame, using the ordered dither", static_cast<unsigned>(bytes));
   return frame;
 }
 
-// Halftones gray (width x height, the page at its output size) and writes it at (config.x, config.y), then streams it into
-// the pixel cache when config.cachePath is set. Out of memory for the halftone falls back to a plain threshold (the page
-// is still shown). Rows below the screen are skipped, as in the per-pixel path.
+// Halftones gray (width x height, the page at its output size) and writes it at (config.x, config.y), then streams it
+// into the pixel cache when config.cachePath is set. Out of memory for the halftone falls back to a plain threshold
+// (the page is still shown). Rows below the screen are skipped, as in the per-pixel path.
 inline void finish(GfxRenderer& renderer, const RenderConfig& config, uint8_t* gray, const int width, const int height,
                    const int screenWidth, const int screenHeight) {
   uint8_t tone[256];
   for (int i = 0; i < 256; i++) tone[i] = bwToneCurve(static_cast<uint8_t>(i));
   const size_t bytes = static_cast<size_t>(width) * static_cast<size_t>(height);
+  const unsigned long startMs = millis();
   ComicsHalftone::FramePtr out(ComicsHalftone::allocFrame(bytes));
   const uint8_t* values = nullptr;
   if (out && ComicsHalftone::process(gray, width, height, tone, out.get())) {
     values = out.get();
+    const uint32_t* st = ComicsHalftone::lastStageMicros();
+    LOG_DBG("CMX", "halftone %dx%d: %lu ms (sharpen %lu, edges %lu, mean %lu, decide %lu ms)", width, height,
+            millis() - startMs, static_cast<unsigned long>(st[0] / 1000), static_cast<unsigned long>(st[1] / 1000),
+            static_cast<unsigned long>(st[2] / 1000), static_cast<unsigned long>(st[3] / 1000));
   } else {
     LOG_ERR("CMX", "Comics halftone unavailable, using a plain threshold");
     for (size_t i = 0; i < bytes; i++) gray[i] = gray[i] >= 140 ? 3 : 0;
@@ -87,6 +95,7 @@ inline void finish(GfxRenderer& renderer, const RenderConfig& config, uint8_t* g
     }
   }
   if (caching) cache.finalize();
+  LOG_DBG("CMX", "page finished in %lu ms (halftone and cache write)", millis() - startMs);
 }
 
 }  // namespace ComicsFrame

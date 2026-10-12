@@ -17,13 +17,19 @@
 // (ImageBlock.cpp getCachePath()) so caches written by the old version are not reused.
 namespace ComicsHalftone {
 
-// gray: width * height 8-bit pixels (the page already scaled to its output size, row-major). toneLut: the 256-entry tone
-// curve the other 1-bit dithers use (bwToneCurve). out: width * height, 0 (black) or 3 (white), the two levels of the
-// BW pass. Needs about five bytes per pixel of temporary memory (PSRAM when there is some). Returns false, leaving out
-// untouched, when that could not be allocated or the size is not positive.
+// gray: width * height 8-bit pixels (the page already scaled to its output size, row-major). toneLut: the 256-entry
+// tone curve the other 1-bit dithers use (bwToneCurve). out: width * height, 0 (black) or 3 (white), the two levels of
+// the BW pass. Needs about five bytes per pixel of temporary memory (PSRAM when there is some). Returns false, leaving
+// out untouched, when that could not be allocated or the size is not positive.
 bool process(const uint8_t* gray, int width, int height, const uint8_t* toneLut, uint8_t* out);
 
-// A page-sized buffer for the decoders (PSRAM when there is some; null when it cannot be had). Release with freeFrame().
+// Microseconds the last process() spent in each of STAGE_COUNT stages (sharpen, edge mask, local mean, decide), for the
+// log; zeros when not running on the device.
+constexpr int STAGE_COUNT = 4;
+const uint32_t* lastStageMicros();
+
+// A page-sized buffer for the decoders (PSRAM when there is some; null when it cannot be had). Release with
+// freeFrame().
 uint8_t* allocFrame(size_t bytes);
 void freeFrame(uint8_t* frame);
 
