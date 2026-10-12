@@ -14,17 +14,22 @@
 // DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
 // touch-down moves the highlight and a tap on a word looks it up directly.
 // In a two-page spread it gets both pages in reading order: stepping past the
-// last (first) word of a page continues on the next (previous) page, drawn on
-// this panel like a page turn.
+// last (first) word of a page continues on the next (previous) page, and the
+// highlight moves to the panel that page is on (the right panel's page is
+// highlighted there, through RightPanel::overlay(); the left screen then shows
+// its own page without a highlight).
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> first, std::unique_ptr<Page> second, bool startOnSecond,
+                                        std::unique_ptr<Page> first, std::unique_ptr<Page> second, bool spreadRtl,
                                         int marginLeft, int marginTop)
-      : Activity("DictionaryWordSelect", renderer, mappedInput), marginLeft(marginLeft), marginTop(marginTop) {
+      : Activity("DictionaryWordSelect", renderer, mappedInput),
+        rtl(spreadRtl),
+        marginLeft(marginLeft),
+        marginTop(marginTop) {
     pages[0] = std::move(first);
     pages[1] = std::move(second);
-    cur = startOnSecond && pages[1] ? 1 : 0;
+    cur = rtl && pages[1] ? 1 : 0;  // start on the page of the left panel
     page = pages[cur].get();
   }
 
@@ -53,11 +58,17 @@ class DictionaryWordSelectActivity final : public Activity {
   void moveVertical(int direction);
   void performLookup();
   bool drawHighlightWithSnapshot();
+  void drawHighlight(const WordBox& word) const;
+  void drawPage(Page& pageToDraw);
+  void renderRightFocus();
   void drawHints() const;
+  // Spread pages are in reading order; the first is on the right panel right to left, else the second is.
+  bool onRight(const int pageIndex) const { return rtl ? pageIndex == 0 : pageIndex == 1; }
 
   std::unique_ptr<Page> pages[2];  // reading order; the second is null outside a spread
   int cur = 0;
   Page* page = nullptr;  // pages[cur]
+  const bool rtl;        // right-to-left spread
   const int marginLeft;
   const int marginTop;
   int fontId = 0;
@@ -90,4 +101,10 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
+
+  // Highlight on the right panel's page: whether one is drawn there and for which word, and whether the left screen
+  // currently shows its own page without a highlight (so a move on the right panel needs no left repaint).
+  bool rightHighlighted = false;
+  int rightShownIdx = -1;
+  bool leftClean = false;
 };

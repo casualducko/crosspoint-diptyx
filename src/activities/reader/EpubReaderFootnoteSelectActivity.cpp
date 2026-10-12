@@ -1,23 +1,37 @@
 #include "EpubReaderFootnoteSelectActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <I18n.h>
 
 #include <algorithm>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "RightPanel.h"
 #include "components/UITheme.h"
 
 namespace {
 constexpr unsigned long WORD_REPEAT_START_MS = 500;
 constexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;
+
+// An image on the page may claim the pixel-cache slot (up to 96 KB); release it when the page is drawn.
+struct PxcSlotGuard {
+  ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+};
 }  // namespace
 
 void EpubReaderFootnoteSelectActivity::onEnter() {
   Activity::onEnter();
   snapshot = makeUniqueNoThrow<uint8_t[]>(SNAPSHOT_CAPACITY);
-  buildFootnoteLinks();
+  // Start on the page of the left panel when it has footnotes, otherwise on the other page.
+  for (const int i : {rtl ? 1 : 0, rtl ? 0 : 1}) {
+    if (!pages[i]) continue;
+    cur = i;
+    page = pages[i].get();
+    buildFootnoteLinks();
+    if (!footnoteLinks.empty()) break;
+  }
   requestUpdate();
 }
 
@@ -51,7 +65,8 @@ bool EpubReaderFootnoteSelectActivity::hopToPage(const int target, const bool se
     return false;
   }
   selected = selectLast ? static_cast<int>(footnoteLinks.size()) - 1 : 0;
-  snapshotIdx = -1;  // the framebuffer no longer holds this page
+  snapshotIdx = -1;   // the framebuffer no longer holds this page
+  leftClean = false;  // the left screen is repainted for the new focus
   requestUpdate();
   return true;
 }
@@ -151,7 +166,62 @@ bool EpubReaderFootnoteSelectActivity::drawHighlightWithSnapshot() {
   return saved;
 }
 
+// The marker's highlight box (the same one drawHighlightWithSnapshot() draws): the footnote number on a black box.
+void EpubReaderFootnoteSelectActivity::drawHighlight() const {
+  const PageLink* link = footnoteLinks[selected].link;
+  const int x = link->x + marginLeft;
+  const int y = link->y + marginTop;
+  int hx = x - 2;
+  int hy = y - 2;
+  int hw = link->width + 4;
+  int hh = link->height + 4;
+  if (hx < 0) {
+    hw += hx;
+    hx = 0;
+  }
+  if (hy < 0) {
+    hh += hy;
+    hy = 0;
+  }
+  renderer.fillRect(hx, hy, hw, hh, true);
+  const char* number = footnoteLinks[selected].footnote->number;
+  if (number[0]) {
+    renderer.drawText(SETTINGS.getReaderFontId(), x, y - 1, number, false);
+  }
+}
+
+// The selected marker is on the page of the right panel: the left screen shows its own page without a highlight, and
+// the marker is highlighted on the right panel over that panel's clean page.
+void EpubReaderFootnoteSelectActivity::renderRightFocus() {
+  if (!leftClean) {
+    renderer.clearScreen();
+    if (Page* leftPage = pages[rtl ? 1 : 0].get()) {
+      PxcSlotGuard pxcSlotGuard;
+      leftPage->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
+    }
+    drawHints();
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    leftClean = true;
+  }
+  if (footnoteLinks.empty() || (rightHighlighted && rightShownIdx == selected)) return;
+  const bool shown = RightPanel::overlay(
+      renderer, display, [this] { drawHighlight(); }, HalDisplay::FAST_REFRESH, /*highlighted=*/true);
+  rightHighlighted = shown;
+  rightShownIdx = shown ? selected : -1;
+}
+
 void EpubReaderFootnoteSelectActivity::render(RenderLock&&) {
+  if (onRight(cur)) {
+    renderRightFocus();
+    return;
+  }
+  // The highlight left the right panel (or the selector started on the left page): that panel shows its clean page.
+  if (rightHighlighted) {
+    RightPanel::overlay(renderer, display, [] {}, HalDisplay::FAST_REFRESH, /*highlighted=*/false);
+    rightHighlighted = false;
+    rightShownIdx = -1;
+  }
+
   // Differential fast path: only the highlight moved and the framebuffer still
   // holds a clean page.
   if (snapshotIdx >= 0 && !footnoteLinks.empty() && selected != snapshotIdx) {
@@ -168,10 +238,7 @@ void EpubReaderFootnoteSelectActivity::render(RenderLock&&) {
 
   // Render the page underneath
   if (page) {
-    // An image on the page may claim the pixel-cache slot (up to 96 KB); release it when the page is drawn.
-    struct PxcSlotGuard {
-      ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
-    } pxcSlotGuard;
+    PxcSlotGuard pxcSlotGuard;
     page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
   }
 

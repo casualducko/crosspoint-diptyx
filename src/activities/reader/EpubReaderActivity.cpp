@@ -353,9 +353,13 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   orientedMarginLeft += SETTINGS.screenMargin;
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(pages.first),
-                                                                        std::move(pages.second), pages.startOnSecond,
+                                                                        std::move(pages.second), pages.rtl,
                                                                         orientedMarginLeft, orientedMarginTop),
-                         [this](const ActivityResult&) { requestUpdate(); });
+                         [this](const ActivityResult&) {
+                           // A highlight left on the right panel: its page is redrawn clean with the next render.
+                           if (RightPanel::takeOverlayDirty()) rightPageKey = 0;
+                           requestUpdate();
+                         });
 }
 
 bool EpubReaderActivity::loadSelectorPages(SelectorPages& out) {
@@ -364,7 +368,7 @@ bool EpubReaderActivity::loadSelectorPages(SelectorPages& out) {
   if (!out.first) return false;
   if (spreadActive()) {
     out.second = section->loadPage(section->currentPage + 1);
-    out.startOnSecond = spreadRtl() && out.second;
+    out.rtl = spreadRtl();
   }
   return true;
 }
@@ -385,8 +389,6 @@ void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
     navigateToHref((firstCount ? pages.first : pages.second)->footnotes[0].href, true);
     return;
   }
-  // Start on the page the left panel shows, unless it has no footnotes.
-  const bool startOnSecond = pages.startOnSecond ? secondCount > 0 : firstCount == 0;
 
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -394,13 +396,15 @@ void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
   auto selector = makeUniqueNoThrow<EpubReaderFootnoteSelectActivity>(renderer, mappedInput, std::move(pages.first),
-                                                                      std::move(pages.second), startOnSecond,
+                                                                      std::move(pages.second), pages.rtl,
                                                                       orientedMarginLeft, orientedMarginTop);
   if (!selector) {
     LOG_ERR("ERA", "OOM: EpubReaderFootnoteSelectActivity");
     return;
   }
   startActivityForResult(std::move(selector), [this, reopenMenuOnCancel](const ActivityResult& result) {
+    // A highlight left on the right panel: its page is redrawn clean with the next render.
+    if (RightPanel::takeOverlayDirty()) rightPageKey = 0;
     if (result.isCancelled) {
       if (reopenMenuOnCancel) {
         openReaderMenu();

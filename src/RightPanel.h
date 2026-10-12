@@ -27,7 +27,14 @@ namespace detail {
 // Keep a copy of the frame just drawn for the right panel (polarity-following content), or forget it.
 void rememberFrame(const uint8_t* frame, size_t bytes, bool inverted);
 void forgetFrame();
+// Copies the remembered right-panel frame into dest; false when there is none of that size.
+bool loadStoredFrame(uint8_t* dest, size_t bytes);
+void setOverlayDirty(bool dirty);
 }  // namespace detail
+
+// True once after an overlay() left a highlight on the right panel (and clears it): the reader must redraw its right
+// page to take the highlight away.
+bool takeOverlayDirty();
 
 // The right panel now shows something else (a reader page): make the home screen redraw its card next time.
 void markDirty();
@@ -70,6 +77,35 @@ bool present(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMo
   r.setOrientation(orientation);
   r.restoreBwBuffer(/*resyncPanelBaseline=*/false);
   return true;
+}
+
+// A selection highlight (a word or a footnote marker) on the page that is on the right panel. Shows the remembered
+// right-panel frame (the reader's page, which stays clean in memory) with `draw` painted over it and refreshes only the
+// right panel; the left frame is untouched. `highlighted` says whether `draw` leaves a mark (see takeOverlayDirty());
+// an overlay that draws nothing brings the clean page back. False, drawing nothing, when no frame is remembered or
+// there is no memory to save the left frame.
+template <typename DrawFn>
+bool overlay(GfxRenderer& r, HalDisplay& d, DrawFn&& draw, HalDisplay::RefreshMode mode, bool highlighted) {
+  if (!r.storeBwBuffer()) {
+    LOG_ERR("RP", "No memory to save the left frame; skipping the right panel highlight");
+    return false;
+  }
+  const auto orientation = r.getOrientation();
+  r.setOrientation(GfxRenderer::Orientation::Portrait);
+  const size_t bytes = static_cast<size_t>(r.getDisplayWidthBytes()) * r.getDisplayHeight();
+  const bool ok = detail::loadStoredFrame(d.getFrameBuffer(), bytes);
+  if (ok) {
+    draw();
+    d.selectPanel(HalDisplay::Panel::Right);
+    r.displayBuffer(mode);
+    d.selectPanel(HalDisplay::Panel::Left);
+    detail::setOverlayDirty(highlighted);
+  } else {
+    LOG_ERR("RP", "No remembered right-panel frame to highlight on");
+  }
+  r.setOrientation(orientation);
+  r.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+  return ok;
 }
 
 }  // namespace RightPanel

@@ -2,6 +2,7 @@
 
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -12,6 +13,7 @@
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
+#include "RightPanel.h"
 #include "components/UITheme.h"
 
 namespace {
@@ -117,7 +119,8 @@ bool DictionaryWordSelectActivity::hopToPage(const int target, const bool select
   page = pages[cur].get();
   extractWords();
   selected = selectLast && !words.empty() ? static_cast<int>(words.size()) - 1 : 0;
-  snapshotIdx = -1;  // the framebuffer no longer holds this page
+  snapshotIdx = -1;   // the framebuffer no longer holds this page
+  leftClean = false;  // the left screen is repainted for the new focus
   requestUpdate();
   return true;
 }
@@ -194,7 +197,10 @@ void DictionaryWordSelectActivity::performLookup() {
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict.definitionsAreHtml()),
-        [this](const ActivityResult&) { requestUpdate(); });
+        [this](const ActivityResult&) {
+          leftClean = false;  // the definition screen drew over the left framebuffer
+          requestUpdate();
+        });
     return;
   }
   // Name the failure: a genuine miss is "Not found"; a word that WAS found but
@@ -343,6 +349,63 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   return saved;
 }
 
+// A word's highlight box (the same one drawHighlightWithSnapshot() draws): inverted word on a black box.
+void DictionaryWordSelectActivity::drawHighlight(const WordBox& word) const {
+  int hx = word.x - 2;
+  int hy = word.y - 2;
+  int hw = word.width + 4;
+  int hh = lineHeight + 4;
+  if (hx < 0) {
+    hw += hx;
+    hx = 0;
+  }
+  if (hy < 0) {
+    hh += hy;
+    hy = 0;
+  }
+  renderer.fillRect(hx, hy, hw, hh, true);
+  renderer.drawText(fontId, word.x, word.y, word.text, false, word.style);
+}
+
+// Same prewarm-scan-then-render pass the reader uses, so SD-card fonts hit the in-RAM glyph cache during the real draw.
+void DictionaryWordSelectActivity::drawPage(Page& pageToDraw) {
+  auto* fcm = renderer.getFontCacheManager();
+  auto scope = fcm->createPrewarmScope();
+  // An image on the page may claim the pixel-cache slot (up to 96 KB); release it so it does not stay resident under
+  // the definition screen.
+  struct PxcSlotGuard {
+    ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+  } pxcSlotGuard;
+  pageToDraw.render(renderer, fontId, marginLeft, marginTop);
+  scope.endScanAndPrewarm();
+  pageToDraw.render(renderer, fontId, marginLeft, marginTop);
+}
+
+// The selected word is on the page of the right panel: the left screen shows its own page without a highlight (with the
+// hints and any popup), and the word is highlighted on the right panel over that panel's clean page.
+void DictionaryWordSelectActivity::renderRightFocus() {
+  if (!leftClean || popup != Popup::None) {
+    renderer.clearScreen();
+    if (Page* leftPage = pages[rtl ? 1 : 0].get()) drawPage(*leftPage);
+    drawHints();
+    if (popup != Popup::None) {
+      leftClean = false;
+      GUI.drawPopup(renderer, I18N.get(popupMsg));  // refreshes the display itself
+    } else {
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      leftClean = true;
+    }
+  }
+  if (words.empty() || (rightHighlighted && rightShownIdx == selected)) return;
+  const WordBox& word = words[selected];
+  renderer.getFontCacheManager()->prewarmCache(fontId, word.text,
+                                               static_cast<uint8_t>(1u << (static_cast<uint8_t>(word.style) & 0x03)));
+  const bool shown = RightPanel::overlay(
+      renderer, display, [&] { drawHighlight(word); }, HalDisplay::FAST_REFRESH, /*highlighted=*/true);
+  rightHighlighted = shown;
+  rightShownIdx = shown ? selected : -1;
+}
+
 // Front-button bar (Back/Confirm/Left/Right). Drawn last on every repaint
 // path, including the differential highlight-only path, so it always ends
 // up as the top layer even when a highlighted word's box falls under a
@@ -365,6 +428,18 @@ void DictionaryWordSelectActivity::drawHints() const {
 }
 
 void DictionaryWordSelectActivity::render(RenderLock&&) {
+  if (onRight(cur)) {
+    renderRightFocus();
+    return;
+  }
+  // The highlight left the right panel (or the selector just started on the left page): that panel shows its clean
+  // page again.
+  if (rightHighlighted) {
+    RightPanel::overlay(renderer, display, [] {}, HalDisplay::FAST_REFRESH, /*highlighted=*/false);
+    rightHighlighted = false;
+    rightShownIdx = -1;
+  }
+
   // Differential fast path: only the highlight moved and the framebuffer
   // still holds a clean page (no popup or sub-activity since the last full
   // repaint). Restore the pixels under the old highlight, draw the new one,
@@ -384,19 +459,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   }
 
   renderer.clearScreen();
-
-  // Same prewarm-scan-then-render pass the reader uses, so SD-card fonts hit
-  // the in-RAM glyph cache during the real draw.
-  auto* fcm = renderer.getFontCacheManager();
-  auto scope = fcm->createPrewarmScope();
-  // An image on the page may claim the pixel-cache slot (up to 96 KB); release it so it does not stay resident under
-  // the definition screen.
-  struct PxcSlotGuard {
-    ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
-  } pxcSlotGuard;
-  page->render(renderer, fontId, marginLeft, marginTop);
-  scope.endScanAndPrewarm();
-  page->render(renderer, fontId, marginLeft, marginTop);
+  drawPage(*page);
 
   if (!words.empty()) {
     drawHighlightWithSnapshot();

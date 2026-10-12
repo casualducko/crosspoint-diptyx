@@ -29,7 +29,7 @@
 
 namespace {
 
-constexpr char IDLE_JPG[] = "/idle_screen_right.jpg";       // stock Diptyx idle image convention
+constexpr char IDLE_JPG[] = "/idle_screen_right.jpg";  // stock Diptyx idle image convention
 // Cover box height on the 480x648 card: the cover fills the panel inside a margin, with no text.
 constexpr int kCoverMargin = 28;
 constexpr int kCoverBoxHeight = 648 - 2 * kCoverMargin;
@@ -252,6 +252,7 @@ size_t storedCapacity = 0;
 size_t storedBytes = 0;
 bool storedValid = false;
 bool storedInverted = false;
+bool overlayDirty = false;  // an overlay() left a highlight on the panel
 
 // Cache key of a card: the book plus the polarity it was drawn in.
 uint32_t cardKey(bool hasBook, const std::string& path, bool inverted) {
@@ -321,7 +322,21 @@ void rememberFrame(const uint8_t* frame, size_t bytes, bool inverted) {
 
 void forgetFrame() { storedValid = false; }
 
+bool loadStoredFrame(uint8_t* dest, size_t bytes) {
+  if (!dest || !storedValid || !storedFrame || storedBytes != bytes) return false;
+  memcpy(dest, storedFrame, bytes);
+  return true;
+}
+
+void setOverlayDirty(bool dirty) { overlayDirty = dirty; }
+
 }  // namespace detail
+
+bool takeOverlayDirty() {
+  const bool dirty = overlayDirty;
+  overlayDirty = false;
+  return dirty;
+}
 
 void markDirty() { shownKey = 0; }
 

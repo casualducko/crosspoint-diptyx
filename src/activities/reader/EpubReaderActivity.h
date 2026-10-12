@@ -194,11 +194,11 @@ class EpubReaderActivity final : public ReaderActivity {
   bool spreadRtl() const;     // a right-to-left spread: the first page of each pair is on the right panel
   int leftPageIndex() const;  // the page drawn on the left panel
   // The pages the word and footnote selectors work on, in reading order. `second` is only set in a spread whose chapter
-  // has a page after the position page; `startOnSecond` when the left panel shows it (right to left).
+  // has a page after the position page; `rtl` for a right-to-left spread (the first page is then on the right panel).
   struct SelectorPages {
     std::unique_ptr<Page> first;
     std::unique_ptr<Page> second;
-    bool startOnSecond = false;
+    bool rtl = false;
   };
   bool loadSelectorPages(SelectorPages& out);
   bool pageHasFootnotes() const;       // the page on the left panel or, in a spread, the one on the right
