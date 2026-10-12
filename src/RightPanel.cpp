@@ -209,13 +209,22 @@ std::string sleepCoverBmpPath() {
   const bool cropped = fit == CrossPointSettings::CROP;
   const bool stretched = fit == CrossPointSettings::STRETCH;
   std::string path;
+  // The book objects are large; keep them off the task stack.
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
-    Xtc book(APP_STATE.openEpubPath, "/.crosspoint");
-    if (book.load() && book.generateCoverBmp()) path = book.getCoverBmpPath();
+    auto book = makeUniqueNoThrow<Xtc>(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!book) {
+      LOG_ERR("RP", "OOM: XTC cover");
+      return "";
+    }
+    if (book->load() && book->generateCoverBmp()) path = book->getCoverBmpPath();
   } else if (FsHelpers::hasReflowableBookExtension(APP_STATE.openEpubPath)) {
-    Epub book(APP_STATE.openEpubPath, "/.crosspoint");
-    if (book.load(true, true) && book.generateCoverBmp(cropped, false, stretched)) {
-      path = book.getCoverBmpPath(cropped, false, stretched);
+    auto book = makeUniqueNoThrow<Epub>(APP_STATE.openEpubPath, "/.crosspoint");
+    if (!book) {
+      LOG_ERR("RP", "OOM: EPUB cover");
+      return "";
+    }
+    if (book->load(true, true) && book->generateCoverBmp(cropped, false, stretched)) {
+      path = book->getCoverBmpPath(cropped, false, stretched);
     }
   }
   return !path.empty() && usableCoverBmp(path) ? path : std::string();

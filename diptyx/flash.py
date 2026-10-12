@@ -206,6 +206,9 @@ def download(url, dest):
                 break
             f.write(chunk)
             done += len(chunk)
+            if done > APP_MAX:
+                print()
+                die("The download is larger than the 6 MB app slot; refusing it.")
             if total:
                 print(f"\r  downloading {done * 100 // total:3d}%", end="", flush=True)
     print()

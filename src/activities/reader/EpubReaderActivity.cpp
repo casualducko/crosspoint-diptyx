@@ -1522,6 +1522,8 @@ void EpubReaderActivity::renderBook() {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar();
     renderer.displayBuffer();
+    // The right panel must not keep the previous chapter's page next to an empty one.
+    if (spreadActive()) renderSpreadRightPage(orientedMarginTop, orientedMarginLeft, true);
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;

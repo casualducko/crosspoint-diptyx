@@ -19,7 +19,7 @@ bool ensureConverted(const char* tag, const char* jpgPath, const char* bmpPath, 
     HalFile jpg;
     if (!Storage.openFileForRead(tag, jpgPath, jpg)) return false;
     jpgKey = std::to_string(jpg.fileSize()) + ":" + std::to_string(jpg.modificationTime()) + ":" +
-             std::to_string(screenWidth) + "x" + std::to_string(screenHeight) + ":" + std::to_string(fit);
+             std::to_string(screenWidth) + "x" + std::to_string(screenHeight) + ":" + std::to_string(fit) + ":v2";  // v2: tone curve and dither of the current converter
   }
   std::string cachedKey;
   const bool haveKey = Storage.exists(keyPath) && Storage.readFileToString(tag, keyPath, 96, cachedKey);
@@ -31,7 +31,8 @@ bool ensureConverted(const char* tag, const char* jpgPath, const char* bmpPath, 
   HalFile bmp;
   if (!Storage.openFileForRead(tag, jpgPath, jpg) || !Storage.openFileForWrite(tag, bmpPath, bmp)) return false;
   // The decoder needs a lot of heap: a failure with little free is not a verdict on the file, so it is retried next time.
-  const bool lowHeap = ESP.getFreeHeap() < 128 * 1024;
+  // A fragmented heap fails the decoder's contiguous buffers even with plenty free.
+  const bool lowHeap = ESP.getFreeHeap() < 128 * 1024 || ESP.getMaxAllocHeap() < 64 * 1024;
   const bool crop = fit == CrossPointSettings::CROP;
   const bool stretch = fit == CrossPointSettings::STRETCH;
   const bool ok = JpegToBmpConverter::jpegFileTo1BitCoverBmpStream(jpg, bmp, crop, stretch);
