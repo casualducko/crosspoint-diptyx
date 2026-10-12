@@ -289,34 +289,46 @@ def ask(question, default_yes=True, assume=None):
 def leave_bootloader(port):
     """Read-only steps leave the chip in download mode; restart it so the installed app runs again. Uses the RTC
     watchdog reset like the final write: after a physical center-button entry into download mode a plain RTS reset can
-    land in the bootloader again. Does nothing when no step reached the chip (a failed connect would only be retried)."""
+    land in the bootloader again. Does nothing when no step reached the chip (a failed connect would only be retried).
+    Returns True when it restarted the chip."""
     global _in_bootloader
     if not _in_bootloader:
-        return
+        return False
     esptool("--chip", "esp32s3", "--port", port, "--after", "watchdog-reset", "read-mac", capture=True)
     _in_bootloader = False
+    return True
+
+
+RESTART_NOTE = ("The Diptyx was restarted. While it is plugged in it goes back to sleep after a restart, so its screens may look\n"
+                "unchanged: press the LEFT PAGE button to wake it.")
 
 
 def cmd_check(args):
     port = find_port(args.port)
+    restarted = False
     try:
         ok, _ = preflight(port)
     finally:
-        leave_bootloader(port)  # also when preflight stops on a wrong chip, flash size or unreadable partition table
+        restarted = leave_bootloader(port)  # also when preflight stops on a wrong chip, flash size or bad partition table
     if not ok:
         print("  partition table: DIFFERENT from the stock Diptyx layout; flashing would be refused.")
-        return 1
-    print("\nThe device is ready to be flashed. Nothing was written.")
-    return 0
+    else:
+        print("\nThe device is ready to be flashed. Nothing was written.")
+    if restarted:
+        print("\n" + RESTART_NOTE)
+    return 0 if ok else 1
 
 
 def cmd_backup(args):
     port = find_port(args.port)
+    restarted = False
     try:
         ok, mac = preflight(port)
         do_backup(port, mac, args.out)
     finally:
-        leave_bootloader(port)
+        restarted = leave_bootloader(port)
+    if restarted:
+        print("\n" + RESTART_NOTE)
     return 0
 
 

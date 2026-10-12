@@ -85,7 +85,7 @@ The first run sets up a private Python environment inside the folder (nothing is
 3. offers to back up your current flash first (`diptyx-flash-backup-*.bin`; keep it private, it contains your settings),
 4. writes the app image to `0x10000`, the app slot, and nothing else.
 
-Other commands: `./flash.sh check` (inspect only, writes nothing), `./flash.sh backup`, `./flash.sh flash --firmware my-build.bin`.
+Other commands: `./flash.sh check` (inspect only, writes nothing), `./flash.sh backup`, `./flash.sh flash --firmware my-build.bin`. `check` and `backup` restart the Diptyx when they finish; while it is plugged in it goes back to sleep, so the screens may look unchanged: press the **left page** button to wake it.
 
 ## After flashing
 

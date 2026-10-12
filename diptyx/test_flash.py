@@ -78,8 +78,11 @@ class FlasherExits(unittest.TestCase):
         return argparse.Namespace(**base)
 
     def run_quiet(self, fn, *a):
-        with mock.patch("builtins.print"):
-            return fn(*a)
+        with mock.patch("builtins.print") as printed:
+            try:
+                return fn(*a)
+            finally:
+                self.printed = "\n".join(str(c.args[0]) for c in printed.call_args_list if c.args)
 
     # check
     def test_check_restarts_the_app_afterwards(self):
@@ -87,6 +90,21 @@ class FlasherExits(unittest.TestCase):
         self.assertEqual(len(self.fake.resets()), 1)
         self.assertEqual(self.fake.subs()[-1], "read-mac")
         self.assertEqual(self.fake.writes(), [])
+
+    def test_check_and_backup_tell_the_user_the_device_may_be_asleep(self):
+        self.run_quiet(flash.cmd_check, self.args())
+        self.assertIn("LEFT PAGE", self.printed)
+        flash._in_bootloader = False
+        self.fake.calls.clear()
+        self.run_quiet(flash.cmd_backup, self.args())
+        self.assertIn("LEFT PAGE", self.printed)
+
+    def test_no_restart_note_when_the_chip_was_never_reached(self):
+        self.fake.rc["flash-id"] = 2
+        with self.assertRaises(SystemExit):
+            self.run_quiet(flash.cmd_check, self.args())
+        self.assertIn("Could not connect", self.printed)  # the run did print its failure...
+        self.assertNotIn("restarted", self.printed)       # ...but never claims the chip was restarted
 
     def test_read_only_steps_do_not_reset_the_chip_themselves(self):
         self.run_quiet(flash.cmd_check, self.args())
