@@ -158,7 +158,15 @@ int DictionaryWordSelectActivity::closestInRow(const uint16_t row, const int cen
 void DictionaryWordSelectActivity::moveVertical(const int direction) {
   const WordBox& current = words[selected];
   const int targetRow = static_cast<int>(current.row) + direction;
-  if (targetRow < 0 || targetRow >= static_cast<int>(rowCount)) return;
+  // Past the top or bottom row of a spread page: continue on the previous or next page (no-op without one).
+  if (targetRow < 0) {
+    hopToPage(cur - 1, /*selectLast=*/true);
+    return;
+  }
+  if (targetRow >= static_cast<int>(rowCount)) {
+    hopToPage(cur + 1, /*selectLast=*/false);
+    return;
+  }
 
   const int best = closestInRow(static_cast<uint16_t>(targetRow), current.x + current.width / 2);
   if (best >= 0 && best != selected) {
@@ -257,6 +265,10 @@ void DictionaryWordSelectActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    // The Diptyx has no Left control, so Back is the way from the right panel's page to the left one; only from the
+    // left page does it leave.
+    const int leftIdx = rtl ? 1 : 0;
+    if (onRight(cur) && hopToPage(leftIdx, /*selectLast=*/leftIdx < cur)) return;
     finish();
     return;
   }
@@ -412,18 +424,20 @@ void DictionaryWordSelectActivity::renderRightFocus() {
 // hint's screen area. No side-button hints: the full-bleed reader page has no
 // spare gutter for them, so a hint box there would hide text.
 void DictionaryWordSelectActivity::drawHints() const {
+  // On the right panel's page Back returns to the left page, and the hint says so.
+  const char* back = onRight(cur) && pages[rtl ? 1 : 0] ? tr(STR_DIR_LEFT) : tr(STR_BACK);
   // No selectable word on this page: Confirm and navigation are all no-ops
-  // (guarded by words.empty() in loop()/performLookup), so only Back does
-  // anything and only Back is hinted.
+  // (guarded by words.empty() in loop()/performLookup), so only Back (and
+  // Right to the other page of a spread) does anything and only those are hinted.
   if (words.empty()) {
     const bool otherPage = pages[1] != nullptr;
     const auto labels =
-        mappedInput.mapLabels(tr(STR_BACK), "", otherPage ? tr(STR_DIR_LEFT) : "", otherPage ? tr(STR_DIR_RIGHT) : "");
+        mappedInput.mapLabels(back, "", otherPage ? tr(STR_DIR_LEFT) : "", otherPage ? tr(STR_DIR_RIGHT) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }
-  const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT),
-                                                       tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapDirectionalLabels(back, tr(STR_LOOKUP), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT),
+                                                       tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

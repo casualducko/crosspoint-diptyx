@@ -80,13 +80,20 @@ void EpubReaderFootnoteSelectActivity::performJump() {
 }
 
 void EpubReaderFootnoteSelectActivity::drawHints() const {
-  const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT),
+  // On the right panel's page Back returns to the left page when that has footnotes, and the hint says so.
+  const auto& leftPage = pages[rtl ? 1 : 0];
+  const char* back = onRight(cur) && leftPage && !leftPage->footnotes.empty() ? tr(STR_DIR_LEFT) : tr(STR_BACK);
+  const auto labels = mappedInput.mapDirectionalLabels(back, tr(STR_OPEN), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT),
                                                        tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void EpubReaderFootnoteSelectActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    // The Diptyx has no Left control, so Back is the way from the right panel's page back to the left page when that
+    // has footnotes; otherwise (and from the left page) it leaves.
+    const int leftIdx = rtl ? 1 : 0;
+    if (onRight(cur) && hopToPage(leftIdx, /*selectLast=*/leftIdx < cur)) return;
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
