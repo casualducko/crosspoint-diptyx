@@ -17,8 +17,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - name: Release gate tests
-        run: python3 diptyx/ci/test_release_gate.py
+      - name: Release gate and flasher tests
+        run: |
+          python3 diptyx/ci/test_release_gate.py
+          python3 diptyx/test_flash.py
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'

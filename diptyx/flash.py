@@ -55,13 +55,20 @@ def die(msg, code=1):
     sys.exit(code)
 
 
+# True once a read-only step has talked to the chip and left it in the bootloader (--after no-reset); leave_bootloader()
+# only has something to do then.
+_in_bootloader = False
+
+
 def esptool(*args, capture=False, stay=False):
     """Run esptool 5 as `python -m esptool ...`. Returns (returncode, combined output).
 
     stay=True adds `--after no-reset` for READ-ONLY commands: the chip stays in the bootloader between steps. Without it
     every command hard-resets the chip, which then boots the installed app (the stock firmware re-enumerates as another
-    USB device) and the next step can no longer find it. The final write keeps the default reset so the new app starts.
+    USB device) and the next step can no longer find it. The final write uses `--after watchdog-reset` so the new app
+    starts; leave_bootloader() does the same when a run ends without a write.
     """
+    global _in_bootloader
     cmd = [sys.executable, "-m", "esptool"]
     if stay:
         # global options go before the sub-command: ... --chip X --port P --after no-reset <command>
@@ -74,8 +81,12 @@ def esptool(*args, capture=False, stay=False):
     cmd += list(args)
     if capture:
         p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        return p.returncode, (p.stdout or "") + (p.stderr or "")
-    return subprocess.run(cmd).returncode, ""
+        rc, out = p.returncode, (p.stdout or "") + (p.stderr or "")
+    else:
+        rc, out = subprocess.run(cmd).returncode, ""
+    if stay and rc == 0:
+        _in_bootloader = True
+    return rc, out
 
 
 def require_esptool():
@@ -276,14 +287,22 @@ def ask(question, default_yes=True, assume=None):
 
 
 def leave_bootloader(port):
-    """Read-only commands leave the chip in download mode; reset it so the installed app starts again."""
-    esptool("--chip", "esp32s3", "--port", port, "read-mac", capture=True)
+    """Read-only steps leave the chip in download mode; restart it so the installed app runs again. Uses the RTC
+    watchdog reset like the final write: after a physical center-button entry into download mode a plain RTS reset can
+    land in the bootloader again. Does nothing when no step reached the chip (a failed connect would only be retried)."""
+    global _in_bootloader
+    if not _in_bootloader:
+        return
+    esptool("--chip", "esp32s3", "--port", port, "--after", "watchdog-reset", "read-mac", capture=True)
+    _in_bootloader = False
 
 
 def cmd_check(args):
     port = find_port(args.port)
-    ok, _ = preflight(port)
-    leave_bootloader(port)
+    try:
+        ok, _ = preflight(port)
+    finally:
+        leave_bootloader(port)  # also when preflight stops on a wrong chip, flash size or unreadable partition table
     if not ok:
         print("  partition table: DIFFERENT from the stock Diptyx layout; flashing would be refused.")
         return 1
@@ -293,8 +312,8 @@ def cmd_check(args):
 
 def cmd_backup(args):
     port = find_port(args.port)
-    ok, mac = preflight(port)
     try:
+        ok, mac = preflight(port)
         do_backup(port, mac, args.out)
     finally:
         leave_bootloader(port)
@@ -309,9 +328,9 @@ def cmd_flash(args):
         size = check_app_image(firmware)
         print(f"Firmware: {firmware} ({size:,} bytes, sha256 {sha256_file(firmware)[:16]}...)")
         port = find_port(args.port)
-        ok, mac = preflight(port)
         written = False
         try:
+            ok, mac = preflight(port)
             if not ok:
                 die("The device's partition table is not the stock Diptyx layout, so 0x10000 may not be the app slot.\n"
                     "Nothing was written.")
