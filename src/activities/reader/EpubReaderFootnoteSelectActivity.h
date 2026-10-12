@@ -13,14 +13,20 @@
 // DictionaryWordSelectActivity: the page renders underneath and each footnote
 // reference marker gets a highlight box. Up/Down/Left/Right move between
 // markers, Confirm jumps to that footnote, Back returns to the reader.
+// In a two-page spread it gets both pages in reading order: stepping past the
+// last (first) marker of a page continues on the next (previous) page that has
+// footnotes, drawn on this panel like a page turn.
 class EpubReaderFootnoteSelectActivity final : public Activity {
  public:
   explicit EpubReaderFootnoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                            std::unique_ptr<Page> page, int marginLeft, int marginTop)
-      : Activity("EpubReaderFootnoteSelect", renderer, mappedInput),
-        page(std::move(page)),
-        marginLeft(marginLeft),
-        marginTop(marginTop) {}
+                                            std::unique_ptr<Page> first, std::unique_ptr<Page> second,
+                                            bool startOnSecond, int marginLeft, int marginTop)
+      : Activity("EpubReaderFootnoteSelect", renderer, mappedInput), marginLeft(marginLeft), marginTop(marginTop) {
+    pages[0] = std::move(first);
+    pages[1] = std::move(second);
+    cur = startOnSecond && pages[1] ? 1 : 0;
+    page = pages[cur].get();
+  }
 
  private:
   void onEnter() override;
@@ -29,11 +35,14 @@ class EpubReaderFootnoteSelectActivity final : public Activity {
 
  private:
   void buildFootnoteLinks();
+  bool hopToPage(int target, bool selectLast);
   void performJump();
   bool drawHighlightWithSnapshot();
   void drawHints() const;
 
-  std::unique_ptr<Page> page;
+  std::unique_ptr<Page> pages[2];  // reading order; the second is null outside a spread
+  int cur = 0;
+  Page* page = nullptr;  // pages[cur]
   const int marginLeft;
   const int marginTop;
 

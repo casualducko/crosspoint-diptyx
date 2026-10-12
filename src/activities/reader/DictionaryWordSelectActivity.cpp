@@ -110,6 +110,18 @@ void DictionaryWordSelectActivity::extractWords() {
   }
 }
 
+// Shows pages[target] and puts the highlight on its first or last word.
+bool DictionaryWordSelectActivity::hopToPage(const int target, const bool selectLast) {
+  if (target < 0 || target > 1 || !pages[target]) return false;
+  cur = target;
+  page = pages[cur].get();
+  extractWords();
+  selected = selectLast && !words.empty() ? static_cast<int>(words.size()) - 1 : 0;
+  snapshotIdx = -1;  // the framebuffer no longer holds this page
+  requestUpdate();
+  return true;
+}
+
 // Index of the word whose box (with finger-sized slop) contains the touch
 // point; -1 when the touch lands on no word. Boxes never overlap after the
 // slop grows them, at worst they touch, so first hit wins.
@@ -247,8 +259,6 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  if (words.empty()) return;
-
   // Touch: a touch-down moves the highlight to the touched word (differential
   // repaint), a tap on a word selects and looks it up in one go.
   int tx = 0;
@@ -278,17 +288,22 @@ void DictionaryWordSelectActivity::loop() {
                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));
   const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
                          (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));
-  if (moveLeft && selected > 0) {
+  // A page without words is still shown so the other page of a spread can be reached from it.
+  if (moveLeft && !words.empty() && selected > 0) {
     selected--;
     lastHorizontalMoveTime = now;
     requestUpdate();
-  } else if (moveRight && hasNextWord) {
+  } else if (moveRight && !words.empty() && hasNextWord) {
     selected++;
     lastHorizontalMoveTime = now;
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
+  } else if (moveLeft && hopToPage(cur - 1, /*selectLast=*/true)) {
+    lastHorizontalMoveTime = now;
+  } else if (moveRight && hopToPage(cur + 1, /*selectLast=*/false)) {
+    lastHorizontalMoveTime = now;
+  } else if (!words.empty() && mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
+  } else if (!words.empty() && mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
     moveVertical(1);
   }
 }
@@ -338,7 +353,9 @@ void DictionaryWordSelectActivity::drawHints() const {
   // (guarded by words.empty() in loop()/performLookup), so only Back does
   // anything and only Back is hinted.
   if (words.empty()) {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    const bool otherPage = pages[1] != nullptr;
+    const auto labels =
+        mappedInput.mapLabels(tr(STR_BACK), "", otherPage ? tr(STR_DIR_LEFT) : "", otherPage ? tr(STR_DIR_RIGHT) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }

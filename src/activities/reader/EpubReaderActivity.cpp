@@ -304,23 +304,22 @@ void EpubReaderActivity::openReaderMenu() {
   const ChapterPosition position = chapterPosition();
   const int bookProgressPercent = bookPercentFor(position);
 
-  startActivityForResult(
-      std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), position.displayPage(),
-                                               position.totalPages, bookProgressPercent, SETTINGS.orientation,
-                                               !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
-      [this](const ActivityResult& result) {
-        const auto& menu = std::get<MenuResult>(result.data);
+  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
+                             renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
+                             bookProgressPercent, SETTINGS.orientation, pageHasFootnotes(), !cachedBookmarks.empty()),
+                         [this](const ActivityResult& result) {
+                           const auto& menu = std::get<MenuResult>(result.data);
 
-        if (SETTINGS.orientation != menu.orientation) {
-          applyOrientation(menu.orientation);
-        }
+                           if (SETTINGS.orientation != menu.orientation) {
+                             applyOrientation(menu.orientation);
+                           }
 
-        toggleAutoPageTurn(menu.pageTurnOption);
+                           toggleAutoPageTurn(menu.pageTurnOption);
 
-        if (!result.isCancelled) {
-          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-        }
-      });
+                           if (!result.isCancelled) {
+                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                           }
+                         });
 }
 
 bool EpubReaderActivity::buildTickHeapGate() {
@@ -344,9 +343,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
     requestUpdate();
     return;
   }
-  if (!section) return;
-  auto page = section->loadPage(leftPageIndex());
-  if (!page) return;
+  SelectorPages pages;
+  if (!loadSelectorPages(pages)) return;
 
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -354,27 +352,49 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
 
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(pages.first),
+                                                                        std::move(pages.second), pages.startOnSecond,
                                                                         orientedMarginLeft, orientedMarginTop),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
+bool EpubReaderActivity::loadSelectorPages(SelectorPages& out) {
+  if (!section) return false;
+  out.first = section->loadPage(section->currentPage);
+  if (!out.first) return false;
+  if (spreadActive()) {
+    out.second = section->loadPage(section->currentPage + 1);
+    out.startOnSecond = spreadRtl() && out.second;
+  }
+  return true;
+}
+
+bool EpubReaderActivity::pageHasFootnotes() const {
+  if (!currentPageFootnotes.empty()) return true;
+  return spreadActive() && rightPageKey != 0 && rightPageFootnotesKey == rightPageKey && rightPageHasFootnotes;
+}
+
 void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
-  if (!section || currentPageFootnotes.empty()) return;
-  if (currentPageFootnotes.size() == 1) {
-    navigateToHref(currentPageFootnotes[0].href, true);
+  if (!section) return;
+  SelectorPages pages;
+  if (!loadSelectorPages(pages)) return;
+  const size_t firstCount = pages.first->footnotes.size();
+  const size_t secondCount = pages.second ? pages.second->footnotes.size() : 0;
+  if (firstCount + secondCount == 0) return;
+  if (firstCount + secondCount == 1) {
+    navigateToHref((firstCount ? pages.first : pages.second)->footnotes[0].href, true);
     return;
   }
-
-  auto page = section->loadPage(leftPageIndex());
-  if (!page) return;
+  // Start on the page the left panel shows, unless it has no footnotes.
+  const bool startOnSecond = pages.startOnSecond ? secondCount > 0 : firstCount == 0;
 
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
-  auto selector = makeUniqueNoThrow<EpubReaderFootnoteSelectActivity>(renderer, mappedInput, std::move(page),
+  auto selector = makeUniqueNoThrow<EpubReaderFootnoteSelectActivity>(renderer, mappedInput, std::move(pages.first),
+                                                                      std::move(pages.second), startOnSecond,
                                                                       orientedMarginLeft, orientedMarginTop);
   if (!selector) {
     LOG_ERR("ERA", "OOM: EpubReaderFootnoteSelectActivity");
@@ -1545,8 +1565,8 @@ void EpubReaderActivity::renderBook() {
     // The page drawn on the left panel: the position page, or right to left the page after it (blank when the chapter
     // ends on an odd page). Loading it here puts a failed read through the same retry handling as any page.
     const int leftIndex = leftPageIndex();
-    auto p = leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex)
-                                                              : makeUniqueNoThrow<Page>();
+    auto p =
+        leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex) : makeUniqueNoThrow<Page>();
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       automaticPageTurnActive = false;
@@ -1966,9 +1986,7 @@ bool EpubReaderActivity::spreadRtl() const {
 
 // The position page is always section->currentPage (even, the first page of the pair). Left to right it is drawn on the
 // left panel; right to left it goes to the right panel and the left panel draws the page after it.
-int EpubReaderActivity::leftPageIndex() const {
-  return section ? section->currentPage + (spreadRtl() ? 1 : 0) : 0;
-}
+int EpubReaderActivity::leftPageIndex() const { return section ? section->currentPage + (spreadRtl() ? 1 : 0) : 0; }
 
 // Draws the other page of the pair on the right panel (blank when the chapter has no such page): page N+1 left to
 // right, the position page itself right to left. The left panel's frame in the shared
@@ -1982,11 +2000,11 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   // Skip the panel refresh when nothing about the right page changed (e.g. the menu overlay opened and closed).
   // Night mode is not part of the key: RightPanel::refreshPolarity() re-shows the stored frame when it flips.
   uint32_t key = 2166136261u;
-  for (const uint32_t v : {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n),
-                           static_cast<uint32_t>(pageExists), static_cast<uint32_t>(section->pageCount),
-                           static_cast<uint32_t>(fontId), static_cast<uint32_t>(SETTINGS.screenMargin),
-                           static_cast<uint32_t>(spreadRtl()),
-                           static_cast<uint32_t>(spreadRtl() && currentPageBookmarked)}) {
+  for (const uint32_t v :
+       {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n), static_cast<uint32_t>(pageExists),
+        static_cast<uint32_t>(section->pageCount), static_cast<uint32_t>(fontId),
+        static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(spreadRtl()),
+        static_cast<uint32_t>(spreadRtl() && currentPageBookmarked)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
@@ -2016,13 +2034,18 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   if (RightPanel::present(renderer, display, draw, leftWasFull ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH,
                           /*keepInversion=*/true)) {
     // A page that exists but failed to load was shown blank; leave the key unset so the next render retries it.
-    if (!pageExists || rightPage) rightPageKey = key;
+    if (!pageExists || rightPage) {
+      rightPageKey = key;
+      rightPageHasFootnotes = rightPage && !rightPage->footnotes.empty();
+      rightPageFootnotesKey = key;
+    }
     RightPanel::markDirty();  // the home screen must redraw its card after reading
   }
 }
 
 void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
-  // Callers pass 0 for the left panel and 1 for the right one; right to left the panels hold the pages the other way round.
+  // Callers pass 0 for the left panel and 1 for the right one; right to left the panels hold the pages the other way
+  // round.
   const int pageOffset = spreadRtl() ? 1 - pageOffsetOnPanel : pageOffsetOnPanel;
   // A last odd page leaves the left panel without a page right to left: no page number for a page that does not exist.
   if (pageOffset > 0 && section && !section->isBuilding() &&
@@ -2196,8 +2219,8 @@ void EpubReaderActivity::dismissBookmarkPopup() {
   overlayPageStored = false;
   // The glass shows the popup, so the differential baseline keeps tracking what was pushed (see restoreBwBuffer()).
   renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
-  // The status bar draws on top of what is there, so a removed bookmark icon would stay in the restored frame: blank the
-  // bottom margin strip (below the page) first, then draw the bar again.
+  // The status bar draws on top of what is there, so a removed bookmark icon would stay in the restored frame: blank
+  // the bottom margin strip (below the page) first, then draw the bar again.
   int marginTop = 0;
   int marginRight = 0;
   int marginBottom = 0;
@@ -2709,7 +2732,7 @@ void EpubReaderActivity::applyReaderTextSettings() {
 // two entries that have their own tool (chapters -> Contents, text -> Text).
 void EpubReaderActivity::buildMoreActions() {
   using MA = EpubReaderMenuActivity::MenuAction;
-  EpubReaderMenuActivity::buildMenuItems(moreItems, !currentPageFootnotes.empty(), !cachedBookmarks.empty());
+  EpubReaderMenuActivity::buildMenuItems(moreItems, pageHasFootnotes(), !cachedBookmarks.empty());
   moreItems.erase(std::remove_if(moreItems.begin(), moreItems.end(),
                                  [](const auto& item) {
                                    return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS;

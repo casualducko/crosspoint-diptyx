@@ -13,14 +13,20 @@
 // in reading order, Up/Down jump rows, Confirm looks the word up and opens
 // DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
 // touch-down moves the highlight and a tap on a word looks it up directly.
+// In a two-page spread it gets both pages in reading order: stepping past the
+// last (first) word of a page continues on the next (previous) page, drawn on
+// this panel like a page turn.
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
-      : Activity("DictionaryWordSelect", renderer, mappedInput),
-        page(std::move(page)),
-        marginLeft(marginLeft),
-        marginTop(marginTop) {}
+                                        std::unique_ptr<Page> first, std::unique_ptr<Page> second, bool startOnSecond,
+                                        int marginLeft, int marginTop)
+      : Activity("DictionaryWordSelect", renderer, mappedInput), marginLeft(marginLeft), marginTop(marginTop) {
+    pages[0] = std::move(first);
+    pages[1] = std::move(second);
+    cur = startOnSecond && pages[1] ? 1 : 0;
+    page = pages[cur].get();
+  }
 
   void onEnter() override;
   void loop() override;
@@ -41,6 +47,7 @@ class DictionaryWordSelectActivity final : public Activity {
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
 
   void extractWords();
+  bool hopToPage(int target, bool selectLast);
   int closestInRow(uint16_t row, int centerX) const;
   int wordAt(int x, int y) const;
   void moveVertical(int direction);
@@ -48,7 +55,9 @@ class DictionaryWordSelectActivity final : public Activity {
   bool drawHighlightWithSnapshot();
   void drawHints() const;
 
-  std::unique_ptr<Page> page;
+  std::unique_ptr<Page> pages[2];  // reading order; the second is null outside a spread
+  int cur = 0;
+  Page* page = nullptr;  // pages[cur]
   const int marginLeft;
   const int marginTop;
   int fontId = 0;

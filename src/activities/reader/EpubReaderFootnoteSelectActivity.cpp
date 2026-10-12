@@ -37,6 +37,25 @@ void EpubReaderFootnoteSelectActivity::buildFootnoteLinks() {
   }
 }
 
+// Shows pages[target] if it has footnote markers, with the highlight on its first or last one.
+bool EpubReaderFootnoteSelectActivity::hopToPage(const int target, const bool selectLast) {
+  if (target < 0 || target > 1 || !pages[target]) return false;
+  const int previous = cur;
+  cur = target;
+  page = pages[cur].get();
+  buildFootnoteLinks();
+  if (footnoteLinks.empty()) {
+    cur = previous;
+    page = pages[cur].get();
+    buildFootnoteLinks();
+    return false;
+  }
+  selected = selectLast ? static_cast<int>(footnoteLinks.size()) - 1 : 0;
+  snapshotIdx = -1;  // the framebuffer no longer holds this page
+  requestUpdate();
+  return true;
+}
+
 void EpubReaderFootnoteSelectActivity::performJump() {
   if (footnoteLinks.empty()) return;
   ActivityResult result;
@@ -67,9 +86,8 @@ void EpubReaderFootnoteSelectActivity::loop() {
     return;
   }
 
-  if (footnoteLinks.empty()) return;
-
-  const bool hasNext = selected + 1 < static_cast<int>(footnoteLinks.size());
+  const bool hasPrev = !footnoteLinks.empty() && selected > 0;
+  const bool hasNext = !footnoteLinks.empty() && selected + 1 < static_cast<int>(footnoteLinks.size());
   const unsigned long now = millis();
   const bool repeat =
       mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
@@ -77,14 +95,20 @@ void EpubReaderFootnoteSelectActivity::loop() {
                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));
   const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
                          (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));
-  if ((moveLeft || mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) && selected > 0) {
+  const bool goPrev = moveLeft || mappedInput.wasPressed(MappedInputManager::Button::ScreenUp);
+  const bool goNext = moveRight || mappedInput.wasPressed(MappedInputManager::Button::ScreenDown);
+  if (goPrev && hasPrev) {
     selected--;
     if (moveLeft) lastHorizontalMoveTime = now;
     requestUpdate();
-  } else if ((moveRight || mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) && hasNext) {
+  } else if (goNext && hasNext) {
     selected++;
     if (moveRight) lastHorizontalMoveTime = now;
     requestUpdate();
+  } else if (goPrev && hopToPage(cur - 1, /*selectLast=*/true)) {
+    if (moveLeft) lastHorizontalMoveTime = now;
+  } else if (goNext && hopToPage(cur + 1, /*selectLast=*/false)) {
+    if (moveRight) lastHorizontalMoveTime = now;
   }
 }
 

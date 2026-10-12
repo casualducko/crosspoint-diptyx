@@ -191,8 +191,19 @@ class EpubReaderActivity final : public ReaderActivity {
   void renderStatusBar(int pageOffset = 0) const;
   // Diptyx two-page spread: left panel = page N (N even), right panel = page N+1. Page turns advance by two.
   bool spreadActive() const;
-  bool spreadRtl() const;       // a right-to-left spread: the first page of each pair is on the right panel
-  int leftPageIndex() const;    // the page drawn on the left panel
+  bool spreadRtl() const;     // a right-to-left spread: the first page of each pair is on the right panel
+  int leftPageIndex() const;  // the page drawn on the left panel
+  // The pages the word and footnote selectors work on, in reading order. `second` is only set in a spread whose chapter
+  // has a page after the position page; `startOnSecond` when the left panel shows it (right to left).
+  struct SelectorPages {
+    std::unique_ptr<Page> first;
+    std::unique_ptr<Page> second;
+    bool startOnSecond = false;
+  };
+  bool loadSelectorPages(SelectorPages& out);
+  bool pageHasFootnotes() const;       // the page on the left panel or, in a spread, the one on the right
+  bool rightPageHasFootnotes = false;  // valid while rightPageFootnotesKey == rightPageKey
+  uint32_t rightPageFootnotesKey = 0;
   void renderSpreadRightPage(int marginTop, int marginLeft, bool leftWasFull);
   uint32_t rightPageKey = 0;  // what the right panel currently shows (see renderSpreadRightPage)
   void applyOrientation(uint8_t orientation);
