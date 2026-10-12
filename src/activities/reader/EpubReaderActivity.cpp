@@ -385,7 +385,9 @@ void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
   const size_t firstCount = pages.first->footnotes.size();
   const size_t secondCount = pages.second ? pages.second->footnotes.size() : 0;
   if (firstCount + secondCount == 0) return;
-  if (firstCount + secondCount == 1) {
+  // A single footnote is followed straight away on one page (a list of one is a wasted step). In a spread the selector
+  // is shown anyway: it highlights the footnote on whichever screen it is on before anything is opened.
+  if (firstCount + secondCount == 1 && !spreadActive()) {
     navigateToHref((firstCount ? pages.first : pages.second)->footnotes[0].href, true);
     return;
   }
