@@ -1120,6 +1120,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
   appliedOrientation = orientation;
   section.reset();
+  resetComicPairing();
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
@@ -1160,7 +1161,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     } else if (currentSpineIndex + 1 < epub->getSpineItemsCount()) {
       RenderLock lock;
       nextPageNumber = 0;
-      currentSpineIndex++;
+      currentSpineIndex = std::min(currentSpineIndex + (comicPaired() ? 2 : 1), epub->getSpineItemsCount());
       section.reset();
       lastPageTurnTime = millis();
       return true;
@@ -1178,7 +1179,14 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       RenderLock lock;
       nextPageNumber = 0;
       pendingPageJump = std::numeric_limits<uint16_t>::max();
-      currentSpineIndex--;
+      // Back over a comic pair lands on the pair before it (pairs are files 1+2, 3+4 ... from where reading is).
+      int back = 1;
+      if (spreadActive() && currentSpineIndex >= 2 && buildViewportWidth > 0) {
+        const ReaderRenderSpec spec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
+        if (spineIsSingleImage(currentSpineIndex - 1, spec) && spineIsSingleImage(currentSpineIndex - 2, spec))
+          back = 2;
+      }
+      currentSpineIndex -= back;
       section.reset();
       lastPageTurnTime = millis();
       return true;
@@ -1554,6 +1562,8 @@ void EpubReaderActivity::renderBook() {
   // Spread pages are (0,1), (2,3), ...: keep the left page even whatever put us here (resume, jump, setting toggled).
   if (spreadActive() && (section->currentPage & 1) && section->currentPage > 0) section->currentPage--;
 
+  updateComicPartner(renderSpec);  // before anything is drawn: building a partner may borrow the frame buffer
+
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
@@ -1584,8 +1594,11 @@ void EpubReaderActivity::renderBook() {
     // The page drawn on the left panel: the position page, or right to left the page after it (blank when the chapter
     // ends on an odd page). Loading it here puts a failed read through the same retry handling as any page.
     const int leftIndex = leftPageIndex();
-    auto p =
-        leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex) : makeUniqueNoThrow<Page>();
+    // A comic pair right to left has the first file on the right screen, so the left one shows the partner.
+    const bool partnerOnLeft = comicPaired() && spreadRtl();
+    auto p = partnerOnLeft                                      ? partnerSection->loadPage(0)
+             : leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex)
+                                                                : makeUniqueNoThrow<Page>();
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       automaticPageTurnActive = false;
@@ -1991,6 +2004,82 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 }
 
+// A page that holds an image and no text: what a comic or manga EPUB has in each chapter file.
+bool EpubReaderActivity::isImageOnlyPage(const Page& page) {
+  bool hasImage = false;
+  for (const auto& element : page.elements) {
+    if (element->getTag() == TAG_PageImage) {
+      hasImage = true;
+    } else if (element->getTag() == TAG_PageLine) {
+      const auto* block = static_cast<const PageLine*>(element.get())->getBlock();
+      if (block && block->valid() && block->wordCount() > 0) return false;
+    } else {
+      return false;
+    }
+  }
+  return hasImage;
+}
+
+void EpubReaderActivity::resetComicPairing() {
+  partnerSection.reset();
+  partnerSpine = -1;
+  comicSpineKind.clear();
+}
+
+// True when chapter file `spine` is one page holding only an image. Learned once per file (the answer is kept), from
+// the current section or from a section of its own, which is built when the file has none yet. The caller holds the
+// render lock, as section builds need the renderer.
+bool EpubReaderActivity::spineIsSingleImage(const int spine, const ReaderRenderSpec& spec) {
+  const int count = epub ? epub->getSpineItemsCount() : 0;
+  if (spine < 0 || spine >= count) return false;
+  if (static_cast<int>(comicSpineKind.size()) != count) comicSpineKind.assign(static_cast<size_t>(count), -1);
+  int8_t& kind = comicSpineKind[static_cast<size_t>(spine)];
+  if (kind >= 0) return kind == 1;
+
+  Section* source = nullptr;
+  std::unique_ptr<Section> temporary;
+  if (section && spine == currentSpineIndex) {
+    source = section.get();
+  } else {
+    temporary = std::unique_ptr<Section>(new (std::nothrow) Section(epub, spine, renderer));
+    if (!temporary) return false;
+    bool ready = temporary->loadSectionFile(spec) && !temporary->isPartial();
+    if (!ready) {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      ready = temporary->createSectionFile(spec);
+    }
+    if (!ready) return false;  // not remembered: the file may build next time
+    source = temporary.get();
+  }
+  bool single = false;
+  if (source->pageCount == 1) {
+    if (const auto page = source->loadPage(0)) single = isImageOnlyPage(*page);
+  }
+  kind = single ? 1 : 0;
+  return single;
+}
+
+// Pairs the current file with the next one when both are one-page image files (and the spread is on); otherwise there
+// is no partner. Keeps a partner that is already loaded for the right file.
+bool EpubReaderActivity::updateComicPartner(const ReaderRenderSpec& spec) {
+  const auto drop = [this]() {
+    partnerSection.reset();
+    partnerSpine = -1;
+    return false;
+  };
+  if (!spreadActive() || !epub || !section || section->isBuilding() || section->pageCount != 1) return drop();
+  const int next = currentSpineIndex + 1;
+  if (next >= epub->getSpineItemsCount()) return drop();
+  if (partnerSection && partnerSpine == next) return true;
+  if (!spineIsSingleImage(currentSpineIndex, spec) || !spineIsSingleImage(next, spec)) return drop();
+
+  auto partner = std::unique_ptr<Section>(new (std::nothrow) Section(epub, next, renderer));
+  if (!partner || !partner->loadSectionFile(spec) || partner->isPartial() || partner->pageCount != 1) return drop();
+  partnerSection = std::move(partner);
+  partnerSpine = next;
+  return true;
+}
+
 bool EpubReaderActivity::spreadActive() const {
   return BoardConfig::isDiptyx() && SETTINGS.twoPageSpread && SETTINGS.orientation == CrossPointSettings::PORTRAIT;
 }
@@ -2013,7 +2102,9 @@ int EpubReaderActivity::leftPageIndex() const { return section ? section->curren
 void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int marginLeft, const bool leftWasFull) {
   if (!section) return;
   const int n = section->currentPage + (spreadRtl() ? 0 : 1);
-  const bool pageExists = n < static_cast<int>(section->pageCount);
+  // A comic pair left to right has the partner file on the right screen.
+  const bool partnerOnRight = comicPaired() && !spreadRtl();
+  const bool pageExists = partnerOnRight || n < static_cast<int>(section->pageCount);
   const int fontId = SETTINGS.getReaderFontId();
 
   // Skip the panel refresh when nothing about the right page changed (e.g. the menu overlay opened and closed).
@@ -2023,14 +2114,15 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
        {static_cast<uint32_t>(currentSpineIndex), static_cast<uint32_t>(n), static_cast<uint32_t>(pageExists),
         static_cast<uint32_t>(section->pageCount), static_cast<uint32_t>(fontId),
         static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(spreadRtl()),
-        static_cast<uint32_t>(spreadRtl() && currentPageBookmarked)}) {
+        static_cast<uint32_t>(spreadRtl() && currentPageBookmarked),
+        static_cast<uint32_t>(partnerOnRight ? currentSpineIndex + 1 : 0)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
   if (key == rightPageKey && !leftWasFull) return;
 
   std::unique_ptr<Page> rightPage;
-  if (pageExists) rightPage = section->loadPage(n);
+  if (pageExists) rightPage = partnerOnRight ? partnerSection->loadPage(0) : section->loadPage(n);
 
   const auto draw = [&] {
     renderer.clearScreen();
@@ -2066,15 +2158,18 @@ void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
   // Callers pass 0 for the left panel and 1 for the right one; right to left the panels hold the pages the other way
   // round.
   const int pageOffset = spreadRtl() ? 1 - pageOffsetOnPanel : pageOffsetOnPanel;
+  // The screen that shows a comic pair's partner file reports that file: one page, and the book position of its file.
+  const bool onPartner = comicPaired() && pageOffset == 1;
+  const int spine = onPartner ? currentSpineIndex + 1 : currentSpineIndex;
   // A last odd page leaves the left panel without a page right to left: no page number for a page that does not exist.
-  if (pageOffset > 0 && section && !section->isBuilding() &&
+  if (!onPartner && pageOffset > 0 && section && !section->isBuilding() &&
       section->currentPage + pageOffset >= static_cast<int>(section->pageCount)) {
     return;
   }
-  const int currentPage = section ? section->currentPage + 1 + pageOffset : 1;
-  const float pageCount = section ? section->estimatedTotalPages() : 1;
+  const int currentPage = onPartner ? 1 : (section ? section->currentPage + 1 + pageOffset : 1);
+  const float pageCount = onPartner ? 1.0f : (section ? section->estimatedTotalPages() : 1);
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
-  const float bookProgress = epub ? (epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100) : 0;
+  const float bookProgress = epub ? (epub->calculateProgress(spine, sectionChapterProg) * 100) : 0;
 
   std::string title;
   int textYOffset = 0;
@@ -2089,7 +2184,7 @@ void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
   } else if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_UNNAMED);
     if (epub) {
-      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+      const int tocIndex = epub->getTocIndexForSpineIndex(spine);
       if (tocIndex != -1) {
         const auto tocItem = epub->getTocItem(tocIndex);
         title = tocItem.title;
@@ -2745,7 +2840,8 @@ void EpubReaderActivity::applyReaderTextSettings() {
     cachedChapterTotalPageCount = section->pageCount;
     nextPageNumber = section->currentPage;
   }
-  section.reset();   // force re-pagination with the new settings
+  section.reset();  // force re-pagination with the new settings
+  resetComicPairing();
   rightPageKey = 0;  // the right page was laid out with the old settings
 }
 

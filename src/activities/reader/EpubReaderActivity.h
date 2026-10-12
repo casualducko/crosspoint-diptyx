@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/Page.h>
 #include <Epub/PageLink.h>
 #include <Epub/Section.h>
 
@@ -206,6 +207,18 @@ class EpubReaderActivity final : public ReaderActivity {
   uint32_t rightPageFootnotesKey = 0;
   void renderSpreadRightPage(int marginTop, int marginLeft, bool leftWasFull);
   uint32_t rightPageKey = 0;  // what the right panel currently shows (see renderSpreadRightPage)
+
+  // Comic spread: with the two-page spread on, a chapter file that is one page holding only an image shares the two
+  // screens with the next file when that is the same kind (comic and manga EPUBs have one image per file). The next
+  // file gets its own section here; the first file stays `section`, which keeps the reading position.
+  std::unique_ptr<Section> partnerSection;
+  int partnerSpine = -1;               // spine index partnerSection was loaded for
+  std::vector<int8_t> comicSpineKind;  // per spine item: -1 not looked at yet, 0 no, 1 a one-page image-only file
+  bool comicPaired() const { return partnerSection && partnerSpine == currentSpineIndex + 1; }
+  bool spineIsSingleImage(int spine, const ReaderRenderSpec& spec);
+  bool updateComicPartner(const ReaderRenderSpec& spec);
+  static bool isImageOnlyPage(const Page& page);
+  void resetComicPairing();  // a layout change: forget the partner and what was learned about the files
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;
   // The orientation the current layout was built for. The control center's
