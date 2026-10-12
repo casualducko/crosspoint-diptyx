@@ -450,16 +450,22 @@ void EpubReaderActivity::loop() {
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
-      const int nextPage = section->currentPage + (spreadActive() ? 2 : 1);
+      // A spread turns to a pair of pages: scan both into one prewarm batch (one page in RAM at a time).
+      const int pagesPerTurn = spreadActive() ? 2 : 1;
+      const int nextPage = section->currentPage + pagesPerTurn;
       if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
-          if (auto* fcm = renderer.getFontCacheManager()) {
-            const auto t0 = millis();
-            auto scope = fcm->createPrewarmScope();
-            p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
-            scope.endScanAndPrewarm();
-            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
+        if (auto* fcm = renderer.getFontCacheManager()) {
+          const auto t0 = millis();
+          auto scope = fcm->createPrewarmScope();
+          int scanned = 0;
+          for (int i = 0; i < pagesPerTurn && nextPage + i < static_cast<int>(section->pageCount); i++) {
+            if (const auto p = section->loadPage(nextPage + i)) {
+              p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
+              scanned++;
+            }
           }
+          scope.endScanAndPrewarm();
+          LOG_DBG("ERS", "Idle prewarm: %d page(s) from %d in %lums", scanned, nextPage, millis() - t0);
         }
       }
     }
