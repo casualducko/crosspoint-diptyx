@@ -2,6 +2,10 @@ name: Diptyx release
 
 # Push a tag like `diptyx-v1.6.5-1` to build the firmware, publish a GitHub release (app image + checksum, which
 # diptyx/flash.py downloads) and deploy the browser flasher (diptyx/web) to GitHub Pages.
+# Tags are `diptyx-v<major>.<minor>.<patch>-<build>`; a -rc / -beta / -dev suffix in place of the build number makes a
+# pre-release. Anything else is refused. Only the newest stable tag becomes "latest" and replaces the web flasher and the
+# manifest the on-device update check reads (diptyx/ci/release_gate.py decides). The build runs with a read-only token;
+# only the small `release` job can write to the repository.
 on:
   push:
     tags: ['diptyx-v*']
@@ -18,12 +22,27 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     permissions:
-      contents: write  # creating the release
+      contents: read  # the build runs PlatformIO and submodule code: no write access here
+    outputs:
+      prerelease: ${{ steps.gate.outputs.prerelease }}
+      latest: ${{ steps.gate.outputs.latest }}
+      pages: ${{ steps.gate.outputs.pages }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           persist-credentials: false
+      - name: Release gate (tag format, pre-release, newest stable)
+        id: gate
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 diptyx/ci/test_release_gate.py
+          gh release list --limit 200 --json tagName,isPrerelease,isDraft > releases.json
+          python3 diptyx/ci/release_gate.py "$GITHUB_REF_NAME" releases.json | tee -a "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -91,30 +110,62 @@ jobs:
             'Licences: the firmware contains third-party libraries, notably wolfSSL under the GPL-2.0, so the binary is distributed under the GPL-2.0. The complete corresponding source is this repository at this release tag (with its freeink-sdk submodule); see the attached `NOTICE.txt` for all licences and the written source offer.' \
             > release-notes.md
       - uses: actions/upload-pages-artifact@v4
-        if: github.ref_type == 'tag' && !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'dev')
+        if: steps.gate.outputs.pages == 'true'
         with:
           path: site
-      - name: Create or update the GitHub release
+      - uses: actions/upload-artifact@v4
         if: github.ref_type == 'tag'
+        with:
+          name: release-files
+          path: |
+            dist
+            release-notes.md
+          retention-days: 1
+
+  release:
+    # The only job with write access. It publishes what the build produced; nothing here runs repository code.
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write  # creating the release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release
+      - name: Create or update the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          LATEST: ${{ needs.build.outputs.latest }}
         run: |
           set -euo pipefail
-          # Tags containing rc / beta / dev are pre-releases, so "latest" (what flash.py downloads) never points at them.
-          flags=""
-          case "$GITHUB_REF_NAME" in *rc*|*beta*|*dev*) flags="--prerelease" ;; esac
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          tag="$GITHUB_REF_NAME"
+          state=$(gh release list --limit 200 --json tagName,isDraft \
+            --jq "map(select(.tagName == \"$tag\")) | if length == 0 then \"none\" elif .[0].isDraft then \"draft\" else \"published\" end")
+          # A draft left behind by a failed run is replaced (its tag stays).
+          if [ "$state" = "draft" ]; then gh release delete "$tag" --yes; state=none; fi
+          if [ "$state" = "published" ]; then
+            gh release upload "$tag" release/dist/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* $flags --title "CrossPoint for Diptyx ${GITHUB_REF_NAME#diptyx-v}" --notes-file release-notes.md --verify-tag
+            flags=""
+            [ "$PRERELEASE" = "true" ] && flags="--prerelease"
+            # A draft first, published once every asset is attached: nobody can see a release without its files.
+            gh release create "$tag" release/dist/* --draft $flags --title "CrossPoint for Diptyx ${tag#diptyx-v}" \
+              --notes-file release/release-notes.md --verify-tag
           fi
+          # "latest" is what flash.py downloads: only the newest stable release may hold it, never a pre-release or an
+          # older tag pushed later.
+          gh release edit "$tag" --draft=false --latest="$LATEST"
 
   deploy-pages:
-    # Only a stable tagged release may replace the public web flasher: not a manual run from a branch, and not a
-    # pre-release (rc / beta / dev) tag, which stays a GitHub pre-release only.
-    if: github.ref_type == 'tag' && !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'beta') && !contains(github.ref_name, 'dev')
-    needs: build
+    # Only the newest stable tagged release may replace the public web flasher and the update manifest: not a manual
+    # run from a branch, not a pre-release (rc / beta / dev), not an older tag pushed after a newer release. It waits
+    # for the release so the page never advertises a firmware that has no published release.
+    if: needs.build.outputs.pages == 'true'
+    needs: [build, release]
     runs-on: ubuntu-24.04
     permissions:
       pages: write
