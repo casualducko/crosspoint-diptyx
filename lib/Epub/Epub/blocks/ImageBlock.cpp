@@ -7,6 +7,7 @@
 #include <Memory.h>
 #include <Serialization.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -35,12 +36,13 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 
 namespace {
 
-std::string getCachePath(const std::string& imagePath) {
+std::string getCachePath(const std::string& imagePath, const bool wide = false) {
   // Replace extension with .pxc (pixel cache). The Diptyx caches its 1-bit result as .pxe<mode>: the extension changes
   // whenever the dither or the downscale changes, and carries the Image Dithering choice, so a cache written by an
   // earlier dither or another mode is never reused.
   std::string ext = ".pxc";
   if (BoardConfig::isDiptyx()) ext = std::string(".pxe") + static_cast<char>('0' + (SETTINGS.imageDither % 10));
+  if (wide) ext += 'w';  // the double-page picture at two screens' width
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
     return imagePath.substr(0, dotPos) + ext;
@@ -169,7 +171,7 @@ bool loadPxcSlot(uint64_t cacheHash, HalFile& cacheFile, uint16_t cachedWidth, u
   return true;
 }
 
-void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y) {
+void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y, const int clipX0, const int clipX1) {
   const int bytesPerRow = (pxcSlotWidth + 3) / 4;
   uint8_t tempRow[PXC_MAX_BYTES_PER_ROW];
 
@@ -181,6 +183,8 @@ void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y) {
     pw.beginRow(y + row);
     int colStart, colEnd;
     pw.bandColRange(x, pxcSlotWidth, colStart, colEnd);
+    colStart = std::max(colStart, clipX0 - x);
+    colEnd = std::min(colEnd, clipX1 - x);
     for (int col = colStart; col < colEnd; col++) {
       const int byteIdx = col >> 2;            // col / 4
       const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
@@ -190,13 +194,14 @@ void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y) {
   }
 }
 
+// Draws the cached image with its top left at (x, y); only the columns with clipX0 <= screen x < clipX1 are written.
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
-                     int expectedHeight) {
+                     int expectedHeight, const int clipX0 = INT16_MIN, const int clipX1 = INT16_MAX) {
   // A later pass of the same page render: the payload is already in RAM, skip
   // the file entirely.
   const uint64_t cacheHash = imagePathHash(cachePath);
   if (pxcSlotHash == cacheHash && pxcSlotWidth != 0) {
-    renderRowsFromPxcSlot(renderer, x, y);
+    renderRowsFromPxcSlot(renderer, x, y, clipX0, clipX1);
     return true;
   }
 
@@ -223,7 +228,7 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   // (all the SD traffic of streaming plus the slot alloc churn); instead later
   // images take the streaming path below, unchanged from pre-cache behavior.
   if (pxcSlotHash == 0 && loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
-    renderRowsFromPxcSlot(renderer, x, y);
+    renderRowsFromPxcSlot(renderer, x, y, clipX0, clipX1);
     LOG_DBG("IMG", "Cache render complete (payload now in RAM)");
     return true;
   }
@@ -277,6 +282,8 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     // the active band; skip the rest instead of unpacking+clipping every pixel.
     int colStart, colEnd;
     pw.bandColRange(x, cachedWidth, colStart, colEnd);
+    colStart = std::max(colStart, clipX0 - x);
+    colEnd = std::min(colEnd, clipX1 - x);
     for (int col = colStart; col < colEnd; col++) {
       const int byteIdx = col >> 2;            // col / 4
       const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
@@ -317,6 +324,76 @@ void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int
   }
 }
 
+bool ImageBlock::ensureExtracted() {
+  if (srcPath.empty() || !extractFn || Storage.exists(imagePath.c_str())) return true;
+  LOG_DBG("IMG", "Lazy-extracting %s -> %s", srcPath.c_str(), imagePath.c_str());
+  if (!extractFn(extractCtx, srcPath.c_str(), imagePath.c_str())) {
+    LOG_ERR("IMG", "Lazy extraction failed: %s", srcPath.c_str());
+    return false;
+  }
+  return true;
+}
+
+namespace {
+int splitHalf = -1;
+int splitViewX = 0, splitViewY = 0, splitViewW = 0, splitViewH = 0;
+}  // namespace
+
+void ImageBlock::setSplitView(const int half, const int viewX, const int viewY, const int viewW, const int viewH) {
+  splitHalf = half;
+  splitViewX = viewX;
+  splitViewY = viewY;
+  splitViewW = viewW;
+  splitViewH = viewH;
+}
+
+// The picture is scaled to fit two content areas side by side and centered; the screen shows the half that is next to
+// the hinge: the left screen the picture's left half, flush with the content area's right edge, the right screen the
+// other half, flush with the left edge.
+void ImageBlock::renderSplit(GfxRenderer& renderer) {
+  const int wideH = std::min<int>(splitViewH, (2 * splitViewW * height) / width);
+  const int wideW = std::min<int>(2 * splitViewW, (wideH * width) / height);
+  if (wideW < 2 || wideH < 1) return;
+  const int half = wideW / 2;
+  const int y = splitViewY + (splitViewH - wideH) / 2;
+  const int x = splitHalf == 0 ? splitViewX + splitViewW - half : splitViewX - half;
+  const int clipX0 = splitHalf == 0 ? x : splitViewX;
+  const int clipX1 = splitHalf == 0 ? splitViewX + splitViewW : splitViewX + (wideW - half);
+
+  if (!renderer.glyphIntersectsStrip(clipX0, y, clipX1 - 1, y + wideH - 1)) return;
+  if (imageFailedThisRender(imagePath)) return;
+
+  const std::string cachePath = getCachePath(imagePath, true);
+  if (!renderFromCache(renderer, cachePath, x, y, wideW, wideH, clipX0, clipX1)) {
+    ensureExtracted();
+    ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+    if (!decoder) {
+      LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
+      rememberImageFailure(imagePath);
+      return;
+    }
+    RenderConfig config;
+    config.x = x;
+    config.y = y;
+    config.maxWidth = wideW;
+    config.maxHeight = wideH;
+    config.useGrayscale = true;
+    config.useDithering = true;
+    config.ditherMode = SETTINGS.imageDither;
+    config.useExactDimensions = true;
+    config.cachePath = cachePath;
+    config.cacheOnly = true;
+    LOG_DBG("IMG", "Decoding the double-page picture %dx%d: %s", wideW, wideH, imagePath.c_str());
+    if (!decoder->decodeToFramebuffer(imagePath, renderer, config) ||
+        !renderFromCache(renderer, cachePath, x, y, wideW, wideH, clipX0, clipX1)) {
+      LOG_ERR("IMG", "Failed to draw the double-page picture: %s", imagePath.c_str());
+      rememberImageFailure(imagePath);
+      return;
+    }
+  }
+  renderer.preserveImagePolarity(clipX0, y, clipX1 - clipX0, wideH);
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
   // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
@@ -325,6 +402,11 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // passes; on first view this just moves the one-time decode to the BW pass.
   FontCacheManager* fcm = renderer.getFontCacheManager();
   if (fcm && fcm->isScanning()) return;
+
+  if (splitHalf >= 0 && isWide()) {
+    renderSplit(renderer);
+    return;
+  }
 
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
@@ -362,12 +444,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   // The build only header-probed the image for dimensions; pull the actual
   // file out of the book now, on first visit to the page.
-  if (!srcPath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
-    LOG_DBG("IMG", "Lazy-extracting %s -> %s", srcPath.c_str(), imagePath.c_str());
-    if (!extractFn(extractCtx, srcPath.c_str(), imagePath.c_str())) {
-      LOG_ERR("IMG", "Lazy extraction failed: %s", srcPath.c_str());
-    }
-  }
+  ensureExtracted();
 
   // No cache - need to decode the image
   // Check if image file exists

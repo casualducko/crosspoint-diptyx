@@ -189,6 +189,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   // Pre-compute orientation and render-mode state once per callback invocation
   DirectPixelWriter pw;
   pw.init(renderer);
+  if (ctx->config->cacheOnly) pw.clipRows = 0;  // every write is dropped
 
   // The cache streams to disk one MCU-row band at a time. Flushing rows below
   // this block (raster order guarantees they are final) repositions the band;
@@ -448,8 +449,8 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   JpegContext ctx;
   ctx.renderer = &renderer;
   ctx.config = &config;
-  ctx.screenWidth = renderer.getScreenWidth();
-  ctx.screenHeight = renderer.getScreenHeight();
+  ctx.screenWidth = config.cacheOnly ? INT16_MAX : renderer.getScreenWidth();
+  ctx.screenHeight = config.cacheOnly ? INT16_MAX : renderer.getScreenHeight();
 
   int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegDrawCallback);
   const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};

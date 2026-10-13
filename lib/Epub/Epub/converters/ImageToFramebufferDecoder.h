@@ -17,13 +17,14 @@ struct RenderConfig {
   int maxWidth, maxHeight;
   bool useGrayscale = true;
   bool useDithering = true;
-  uint8_t ditherMode = 0;           // Diptyx 1-bit dither pattern (DitherUtils.h PANEL_DITHER_*)
+  uint8_t ditherMode = 0;  // Diptyx 1-bit dither pattern (DitherUtils.h PANEL_DITHER_*)
   bool performanceMode = false;
   bool useExactDimensions = false;  // If true, use maxWidth/maxHeight as exact output size (no recalculation)
   float sourceCropX = 0.0f;         // Fraction cropped equally from the left and right edges
   float sourceCropY = 0.0f;         // Fraction cropped equally from the top and bottom edges
   bool preserveAlpha = false;       // Skip transparent pixels instead of compositing them against white
   std::string cachePath;            // If non-empty, decoder will write pixel cache to this path
+  bool cacheOnly = false;           // Write the pixel cache only: nothing is drawn, and the image may exceed the screen
 };
 
 class ImageToFramebufferDecoder {

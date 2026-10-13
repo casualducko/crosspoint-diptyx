@@ -214,9 +214,11 @@ class EpubReaderActivity final : public ReaderActivity {
   std::unique_ptr<Section> partnerSection;
   int partnerSpine = -1;               // spine index partnerSection was loaded for
   std::vector<int8_t> comicSpineKind;  // per spine item: -1 not looked at yet, 0 no, 1 a one-page image-only file
+  bool splitSpread = false;  // the page is a double-page picture drawn across both screens (ImageBlock::setSplitView)
   bool comicPaired() const { return partnerSection && partnerSpine == currentSpineIndex + 1; }
   bool spineIsSingleImage(int spine, const ReaderRenderSpec& spec);
   bool updateComicPartner(const ReaderRenderSpec& spec);
+  void updateSplitSpread();
   static bool isImageOnlyPage(const Page& page);
   void resetComicPairing();  // a layout change: forget the partner and what was learned about the files
   void applyOrientation(uint8_t orientation);

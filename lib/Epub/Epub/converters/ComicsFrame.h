@@ -71,6 +71,7 @@ inline void finish(GfxRenderer& renderer, const RenderConfig& config, uint8_t* g
   }
   DirectPixelWriter pw;
   pw.init(renderer);
+  if (config.cacheOnly) pw.clipRows = 0;
   DirectCacheWriter cw;
   for (int dstY = 0; dstY < height; dstY++) {
     const int outY = config.y + dstY;

@@ -241,6 +241,7 @@ void emitBoxRow(PngContext* ctx) {
   if (outY < ctx->screenHeight) {
     DirectPixelWriter pw;
     pw.init(*ctx->renderer);
+    if (ctx->config->cacheOnly) pw.clipRows = 0;
     pw.beginRow(outY);
     bool caching = ctx->caching;
     DirectCacheWriter cw;
@@ -335,6 +336,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
   pw.init(*ctx->renderer);
+  if (ctx->config->cacheOnly) pw.clipRows = 0;
 
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;
@@ -442,8 +444,8 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.decoder = png.get();
   ctx.renderer = &renderer;
   ctx.config = &config;
-  ctx.screenWidth = renderer.getScreenWidth();
-  ctx.screenHeight = renderer.getScreenHeight();
+  ctx.screenWidth = config.cacheOnly ? INT16_MAX : renderer.getScreenWidth();
+  ctx.screenHeight = config.cacheOnly ? INT16_MAX : renderer.getScreenHeight();
 
   int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
                      pngDrawCallback);

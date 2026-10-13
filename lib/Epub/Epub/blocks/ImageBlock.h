@@ -40,6 +40,12 @@ class ImageBlock final : public Block {
   bool isEmpty() override { return false; }
 
   void render(GfxRenderer& renderer, const int x, const int y);
+
+  // Diptyx two-page spread: a double-page picture (wider than tall) is drawn across both screens, its left half on the
+  // left one and its right half on the right one. The reader sets the half (0 left, 1 right) and the content area of
+  // one screen before it renders such a page, and clears it (half -1) afterwards.
+  static void setSplitView(int half, int viewX, int viewY, int viewW, int viewH);
+  bool isWide() const { return width * 5 >= height * 6; }
   bool serialize(HalFile& file);
   static std::unique_ptr<ImageBlock> deserialize(HalFile& file);
 
@@ -48,6 +54,9 @@ class ImageBlock final : public Block {
   std::string srcPath;  // book-internal source href; empty once known-extracted
   int16_t width;
   int16_t height;
+
+  void renderSplit(GfxRenderer& renderer);
+  bool ensureExtracted();
 
   static void* extractCtx;
   static ExtractFn extractFn;

@@ -1562,6 +1562,7 @@ void EpubReaderActivity::renderBook() {
   // Spread pages are (0,1), (2,3), ...: keep the left page even whatever put us here (resume, jump, setting toggled).
   if (spreadActive() && (section->currentPage & 1) && section->currentPage > 0) section->currentPage--;
 
+  updateSplitSpread();
   updateComicPartner(renderSpec);  // before anything is drawn: building a partner may borrow the frame buffer
 
   renderer.clearScreen();
@@ -1597,6 +1598,7 @@ void EpubReaderActivity::renderBook() {
     // A comic pair right to left has the first file on the right screen, so the left one shows the partner.
     const bool partnerOnLeft = comicPaired() && spreadRtl();
     auto p = partnerOnLeft                                      ? partnerSection->loadPage(0)
+             : splitSpread                                      ? section->loadPage(0)
              : leftIndex < static_cast<int>(section->pageCount) ? section->loadPage(leftIndex)
                                                                 : makeUniqueNoThrow<Page>();
     if (!p) {
@@ -1639,7 +1641,9 @@ void EpubReaderActivity::renderBook() {
 
     const auto start = millis();
     const bool leftRefreshIsFull = forcedRefreshPending || pagesUntilFullRefresh <= 1;  // as renderContents() decides
+    if (splitSpread) ImageBlock::setSplitView(0, orientedMarginLeft, orientedMarginTop, viewportWidth, viewportHeight);
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    ImageBlock::setSplitView(-1, 0, 0, 0, 0);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
@@ -2009,6 +2013,8 @@ bool EpubReaderActivity::isImageOnlyPage(const Page& page) {
   bool hasImage = false;
   for (const auto& element : page.elements) {
     if (element->getTag() == TAG_PageImage) {
+      if (static_cast<const PageImage*>(element.get())->getImageBlock().isWide())
+        return false;  // a double-page picture
       hasImage = true;
     } else if (element->getTag() == TAG_PageLine) {
       const auto* block = static_cast<const PageLine*>(element.get())->getBlock();
@@ -2018,6 +2024,16 @@ bool EpubReaderActivity::isImageOnlyPage(const Page& page) {
     }
   }
   return hasImage;
+}
+
+// A chapter file that is one page holding only a wide picture is a double-page spread: with the spread on it is drawn
+// across both screens.
+void EpubReaderActivity::updateSplitSpread() {
+  splitSpread = false;
+  if (!spreadActive() || !section || section->isBuilding() || section->pageCount != 1) return;
+  const auto page = section->loadPage(0);
+  if (!page || page->elements.size() != 1 || page->elements[0]->getTag() != TAG_PageImage) return;
+  splitSpread = static_cast<const PageImage*>(page->elements[0].get())->getImageBlock().isWide();
 }
 
 void EpubReaderActivity::resetComicPairing() {
@@ -2104,7 +2120,7 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
   const int n = section->currentPage + (spreadRtl() ? 0 : 1);
   // A comic pair left to right has the partner file on the right screen.
   const bool partnerOnRight = comicPaired() && !spreadRtl();
-  const bool pageExists = partnerOnRight || n < static_cast<int>(section->pageCount);
+  const bool pageExists = partnerOnRight || splitSpread || n < static_cast<int>(section->pageCount);
   const int fontId = SETTINGS.getReaderFontId();
 
   // Skip the panel refresh when nothing about the right page changed (e.g. the menu overlay opened and closed).
@@ -2115,14 +2131,14 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
         static_cast<uint32_t>(section->pageCount), static_cast<uint32_t>(fontId),
         static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(spreadRtl()),
         static_cast<uint32_t>(spreadRtl() && currentPageBookmarked),
-        static_cast<uint32_t>(partnerOnRight ? currentSpineIndex + 1 : 0)}) {
+        static_cast<uint32_t>(partnerOnRight ? currentSpineIndex + 1 : 0), static_cast<uint32_t>(splitSpread)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
   if (key == rightPageKey && !leftWasFull) return;
 
   std::unique_ptr<Page> rightPage;
-  if (pageExists) rightPage = partnerOnRight ? partnerSection->loadPage(0) : section->loadPage(n);
+  if (pageExists) rightPage = partnerOnRight ? partnerSection->loadPage(0) : section->loadPage(splitSpread ? 0 : n);
 
   const auto draw = [&] {
     renderer.clearScreen();
@@ -2134,11 +2150,13 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
     // Same two-pass sequence as renderContents(): scan for glyphs, prewarm, then the real draw.
     auto* fcm = renderer.getFontCacheManager();
     auto scope = fcm->createPrewarmScope();
+    if (splitSpread) ImageBlock::setSplitView(1, marginLeft, marginTop, buildViewportWidth, buildViewportHeight);
     rightPage->render(renderer, fontId, marginLeft, marginTop);
     renderStatusBar(1);
     scope.endScanAndPrewarm();
     renderer.clearScreen();
     rightPage->render(renderer, fontId, marginLeft, marginTop);
+    ImageBlock::setSplitView(-1, 0, 0, 0, 0);
     renderStatusBar(1);
   };
 
@@ -2157,7 +2175,7 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
 void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
   // Callers pass 0 for the left panel and 1 for the right one; right to left the panels hold the pages the other way
   // round.
-  const int pageOffset = spreadRtl() ? 1 - pageOffsetOnPanel : pageOffsetOnPanel;
+  const int pageOffset = splitSpread ? 0 : (spreadRtl() ? 1 - pageOffsetOnPanel : pageOffsetOnPanel);
   // The screen that shows a comic pair's partner file reports that file: one page, and the book position of its file.
   const bool onPartner = comicPaired() && pageOffset == 1;
   const int spine = onPartner ? currentSpineIndex + 1 : currentSpineIndex;
