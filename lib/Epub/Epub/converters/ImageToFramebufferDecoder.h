@@ -50,12 +50,12 @@ class ImageToFramebufferDecoder {
   // Size validation helpers. The cap bounds decode TIME, not memory: both decoders
   // stream (JPEG in MCU bands at 1/2..1/8 coarse scale, PNG scanline-by-scanline
   // with its own width-based row-buffer guard), so RAM never scales with source
-  // area. 8 MP admits real-world ebook covers (KDP recommends 1600x2560 and
-  // 2000x3000) while keeping a worst-case single decode in single-digit seconds;
-  // the row callbacks yield periodically so a long decode cannot starve the idle
-  // task's watchdog.
+  // area. 16 MP admits real-world ebook covers (KDP recommends 1600x2560 and
+  // 2000x3000) and scanned double-page comic spreads (4322x3056) while keeping a
+  // worst-case single decode in single-digit seconds; the row callbacks yield
+  // periodically so a long decode cannot starve the idle task's watchdog.
   static constexpr int64_t MAX_SOURCE_DIMENSION = INT16_MAX;
-  static constexpr int64_t MAX_SOURCE_PIXELS = 8388608;  // 8 MP (e.g. 2048 * 4096)
+  static constexpr int64_t MAX_SOURCE_PIXELS = 16777216;  // 16 MP (e.g. 4096 * 4096)
 
   void warnUnsupportedFeature(const std::string& feature, const std::string& imagePath);
 };
