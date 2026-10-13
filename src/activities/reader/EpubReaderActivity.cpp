@@ -444,6 +444,8 @@ void EpubReaderActivity::loop() {
 
   rememberBookOnceRendered();
 
+  if (prefetchBusy && gpio.wasAnyPressed()) prefetchStop = true;
+
   if (bookmarkPopupStored &&
       (gpio.wasAnyPressed() || millis() - bookmarkMessageTime >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS)) {
     dismissBookmarkPopup();
@@ -496,6 +498,7 @@ void EpubReaderActivity::loop() {
       xTaskCreate(&EpubReaderActivity::prefetchTrampoline, "Prefetch", 16384, this, 1, &prefetchTask);
     }
     if (prefetchTask) {
+      prefetchStop = false;
       prefetchBusy = true;
       xTaskNotifyGive(prefetchTask);
     }
@@ -2084,7 +2087,7 @@ void EpubReaderActivity::prefetchLoop() {
       {
         RenderLock lock;  // waits while a page is being drawn
         HalPowerManager::Lock powerLock;
-        more = prefetchStep();
+        more = !prefetchStop && prefetchStep();
       }
       vTaskDelay(pdMS_TO_TICKS(50));  // a page turn that is waiting gets the lock first
     }
@@ -2122,13 +2125,14 @@ void EpubReaderActivity::prefetchSpine(const int spine, const ReaderRenderSpec& 
   if (!next) return;
   bool ready = next->loadSectionFile(spec) && !next->isPartial();
   if (!ready) ready = next->createSectionFile(spec);  // no framebuffer loan: the page on the screen stays intact
-  if (!ready || next->pageCount != 1) return;
+  if (!ready || next->pageCount != 1 || prefetchStop) return;
   const auto page = next->loadPage(0);
   if (!page) return;
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageImage) return;  // text on it: the real render does it
   }
   ImageBlock::clearRenderFailures();
+  ImageBlock::setPrefetchStop(&prefetchStop);
   ImageBlock::setPrefetch(true);
   for (const auto& element : page->elements) {
     auto* image = static_cast<PageImage*>(element.get());
@@ -2139,6 +2143,7 @@ void EpubReaderActivity::prefetchSpine(const int spine, const ReaderRenderSpec& 
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
   }
   ImageBlock::setPrefetch(false);
+  ImageBlock::setPrefetchStop(nullptr);
   ImageBlock::releaseRenderCache();
   ImageBlock::clearRenderFailures();
   LOG_DBG("ERS", "Prefetched file %d in %lums", spine, millis() - t0);

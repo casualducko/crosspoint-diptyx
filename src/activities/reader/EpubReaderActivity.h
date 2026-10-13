@@ -220,8 +220,9 @@ class EpubReaderActivity final : public ReaderActivity {
   // turn (section file, extraction, decode into the pixel cache) so the turn only has to draw them.
   TaskHandle_t prefetchTask = nullptr;
   std::atomic<bool> prefetchBusy{false};
-  int prefetchedFor = -1;    // the chapter file whose next pictures were last prepared
-  uint8_t prefetchDone = 0;  // one bit per file of the next turn
+  std::atomic<bool> prefetchStop{false};  // a button was pressed: the preparation gives way to the page turn
+  int prefetchedFor = -1;                 // the chapter file whose next pictures were last prepared
+  uint8_t prefetchDone = 0;               // one bit per file of the next turn
   bool imagePageOnScreen = false;
   int viewMarginLeft = 0;  // where the page content starts on a screen, as renderBook() last drew it
   int viewMarginTop = 0;

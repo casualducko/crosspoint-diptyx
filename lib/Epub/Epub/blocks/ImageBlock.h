@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 
@@ -47,6 +48,8 @@ class ImageBlock final : public Block {
   // Idle preparation of a page that is not on the screen yet: while set, render() draws nothing and decodes a missing
   // picture into its pixel cache only, so the real render finds it there.
   static void setPrefetch(bool on);
+  // While prefetching, the work stops before its next slow step (extraction, decode) once this flag is set.
+  static void setPrefetchStop(const std::atomic<bool>* stop);
   static void setSplitView(int half, int viewX, int viewY, int viewW, int viewH);
   bool isWide() const { return width * 5 >= height * 6; }
   bool serialize(HalFile& file);

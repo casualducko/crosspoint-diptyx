@@ -37,6 +37,9 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 namespace {
 
 bool prefetching = false;  // ImageBlock::setPrefetch()
+const std::atomic<bool>* prefetchStop = nullptr;
+
+bool prefetchShouldStop() { return prefetching && prefetchStop && prefetchStop->load(); }
 
 void preservePolarity(GfxRenderer& renderer, const int x, const int y, const int w, const int h) {
   if (!prefetching) renderer.preserveImagePolarity(x, y, w, h);
@@ -376,6 +379,8 @@ int splitViewX = 0, splitViewY = 0, splitViewW = 0, splitViewH = 0;
 
 void ImageBlock::setPrefetch(const bool on) { prefetching = on; }
 
+void ImageBlock::setPrefetchStop(const std::atomic<bool>* stop) { prefetchStop = stop; }
+
 void ImageBlock::setSplitView(const int half, const int viewX, const int viewY, const int viewW, const int viewH) {
   splitHalf = half;
   splitViewX = viewX;
@@ -403,6 +408,7 @@ void ImageBlock::renderSplit(GfxRenderer& renderer) {
   const std::string cachePath = getCachePath(imagePath, true);
   if (!renderFromCache(renderer, cachePath, x, y, wideW, wideH, clipX0, clipX1)) {
     ensureExtracted();
+    if (prefetchShouldStop()) return;
     ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
     if (!decoder) {
       LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
@@ -438,6 +444,7 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
   TrimRect rect;
   if (!readTrim(trimPath, rect)) {
     ensureExtracted();
+    if (prefetchShouldStop()) return false;
     rect = {0, 0, 0, 0};
     ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
     ImageDimensions dims;
@@ -475,6 +482,7 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
     return true;
   }
   ensureExtracted();
+  if (prefetchShouldStop()) return true;  // nothing to fall back to: the real render does the rest
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) return false;
   RenderConfig config;
@@ -555,6 +563,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The build only header-probed the image for dimensions; pull the actual
   // file out of the book now, on first visit to the page.
   ensureExtracted();
+  if (prefetchShouldStop()) return;
 
   // No cache - need to decode the image
   // Check if image file exists
