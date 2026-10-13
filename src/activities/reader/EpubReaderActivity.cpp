@@ -2377,6 +2377,12 @@ void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
     title = epub ? epub->getTitle() : "";
   }
 
+  // Zoom Pages: which view of the page this is.
+  if (zoomActive && zoomRows > 1) {
+    const std::string view = std::to_string(zoomRow + 1) + "/" + std::to_string(zoomRows);
+    title = title.empty() ? view : title + " " + view;
+  }
+
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true,
                     pageOffset == 0 && currentPageBookmarked, section ? section->isBuilding() : false);
 }

@@ -561,11 +561,13 @@ ImageBlock::ZoomLayout ImageBlock::computeZoom(const int viewW, const int viewH)
   }
   const int srcW = cropped ? rw : std::max<int>(width, 1);  // the block's size gives the aspect when the page is whole
   const int srcH = cropped ? rh : std::max<int>(height, 1);
+  // The two views overlap by a sixteenth of a screen, so a line of text at the seam is whole in one of them.
+  const int canvasH = 2 * viewH - viewH / 16;
   int zw = 2 * viewW;
   int zh = (2 * viewW * srcH) / srcW;
-  if (zh > 2 * viewH) {
-    zh = 2 * viewH;
-    zw = (2 * viewH * srcW) / srcH;
+  if (zh > canvasH) {
+    zh = canvasH;
+    zw = (canvasH * srcW) / srcH;
   }
   z.rows = 2;
   if (zh <= viewH + viewH / 8) {
