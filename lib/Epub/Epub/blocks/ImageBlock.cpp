@@ -36,6 +36,12 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 
 namespace {
 
+bool prefetching = false;  // ImageBlock::setPrefetch()
+
+void preservePolarity(GfxRenderer& renderer, const int x, const int y, const int w, const int h) {
+  if (!prefetching) renderer.preserveImagePolarity(x, y, w, h);
+}
+
 // Trim Margins: the part of a page worth showing, kept next to the image (.bbx) so the page is measured once.
 struct TrimRect {
   uint16_t x, y, w, h;  // source pixels; w == 0: the page is shown whole
@@ -219,6 +225,12 @@ void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y, const int clipX0
 // Draws the cached image with its top left at (x, y); only the columns with clipX0 <= screen x < clipX1 are written.
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight, const int clipX0 = INT16_MIN, const int clipX1 = INT16_MAX) {
+  if (prefetching) {  // nothing to draw: only say whether a valid cache is there
+    HalFile file;
+    uint16_t w, h;
+    return Storage.openFileForRead("IMG", cachePath, file) &&
+           readValidCacheHeader(file, expectedWidth, expectedHeight, w, h);
+  }
   // A later pass of the same page render: the payload is already in RAM, skip
   // the file entirely.
   const uint64_t cacheHash = imagePathHash(cachePath);
@@ -340,6 +352,7 @@ void ImageBlock::clearRenderFailures() { failedImageCount = 0; }
 void ImageBlock::releaseRenderCache() { releasePxcSlot(); }
 
 void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
+  if (prefetching) return;
   renderer.fillRect(x, y, width, height, true);
   if (width > 2 && height > 2) {
     renderer.fillRect(x + 1, y + 1, width - 2, height - 2, false);
@@ -360,6 +373,8 @@ namespace {
 int splitHalf = -1;
 int splitViewX = 0, splitViewY = 0, splitViewW = 0, splitViewH = 0;
 }  // namespace
+
+void ImageBlock::setPrefetch(const bool on) { prefetching = on; }
 
 void ImageBlock::setSplitView(const int half, const int viewX, const int viewY, const int viewW, const int viewH) {
   splitHalf = half;
@@ -413,7 +428,7 @@ void ImageBlock::renderSplit(GfxRenderer& renderer) {
       return;
     }
   }
-  renderer.preserveImagePolarity(clipX0, y, clipX1 - clipX0, wideH);
+  preservePolarity(renderer, clipX0, y, clipX1 - clipX0, wideH);
 }
 
 // Trim Margins: shows the part of the page that has content, as large as the page's box allows. False when the page is
@@ -456,7 +471,7 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
 
   const std::string cachePath = getCachePath(imagePath, false, true);
   if (renderFromCache(renderer, cachePath, outX, outY, outW, outH)) {
-    renderer.preserveImagePolarity(outX, outY, outW, outH);
+    preservePolarity(renderer, outX, outY, outW, outH);
     return true;
   }
   ensureExtracted();
@@ -472,6 +487,7 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
   config.ditherMode = SETTINGS.imageDither;
   config.useExactDimensions = true;
   config.cachePath = cachePath;
+  config.cacheOnly = prefetching;
   config.cropX = rect.x;
   config.cropY = rect.y;
   config.cropW = rect.w;
@@ -483,7 +499,7 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
     rememberImageFailure(imagePath);
     return false;
   }
-  renderer.preserveImagePolarity(outX, outY, outW, outH);
+  preservePolarity(renderer, outX, outY, outW, outH);
   return true;
 }
 
@@ -532,7 +548,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
-    renderer.preserveImagePolarity(x, y, width, height);
+    preservePolarity(renderer, x, y, width, height);
     return;  // Successfully rendered from cache
   }
 
@@ -572,6 +588,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
+  config.cacheOnly = prefetching;
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
@@ -591,7 +608,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
 
-  renderer.preserveImagePolarity(x, y, width, height);
+  preservePolarity(renderer, x, y, width, height);
   LOG_DBG("IMG", "Decode successful");
 }
 

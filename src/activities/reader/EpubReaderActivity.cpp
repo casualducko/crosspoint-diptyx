@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -175,6 +176,9 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 }  // namespace
 
 EpubReaderActivity::~EpubReaderActivity() {
+  // ActivityManager holds the RenderLock here, so the prefetch task is not inside a step (it takes the lock for each).
+  if (prefetchTask) vTaskDelete(prefetchTask);
+  ImageBlock::setPrefetch(false);
   ImageBlock::setExtractor(nullptr, nullptr);
   // ActivityManager destroys activities with its RenderLock already held;
   // taking another here self-deadlocks (renderingMutex is non-recursive).
@@ -455,6 +459,7 @@ void EpubReaderActivity::loop() {
   }
 
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
+  constexpr unsigned long IDLE_PREFETCH_DEBOUNCE_MS = 1500;
   {
     RenderLock lock(RenderLock::Mode::Try);
     if (lock.ownsLock() && section && !section->isBuilding() && renderer.hasFrameBuffer() &&
@@ -481,6 +486,18 @@ void EpubReaderActivity::loop() {
           LOG_DBG("ERS", "Idle prewarm: %d page(s) from %d in %lums", scanned, nextPage, millis() - t0);
         }
       }
+    }
+  }
+
+  // Comics: start preparing the next turn once the page has been on the screen for a moment.
+  if (BoardConfig::isDiptyx() && imagePageOnScreen && !prefetchBusy && lastRenderCompleteMs != 0 &&
+      millis() - lastRenderCompleteMs > IDLE_PREFETCH_DEBOUNCE_MS && prefetchedFor != currentSpineIndex) {
+    if (!prefetchTask) {
+      xTaskCreate(&EpubReaderActivity::prefetchTrampoline, "Prefetch", 16384, this, 1, &prefetchTask);
+    }
+    if (prefetchTask) {
+      prefetchBusy = true;
+      xTaskNotifyGive(prefetchTask);
     }
   }
 
@@ -1365,6 +1382,8 @@ void EpubReaderActivity::renderBook() {
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
   buildViewportWidth = viewportWidth;
+  viewMarginLeft = orientedMarginLeft;
+  viewMarginTop = orientedMarginTop;
   buildViewportHeight = viewportHeight;
 
   const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
@@ -2034,10 +2053,95 @@ bool EpubReaderActivity::isImageOnlyPage(const Page& page) {
 // across both screens.
 void EpubReaderActivity::updateSplitSpread() {
   splitSpread = false;
-  if (!spreadActive() || !section || section->isBuilding() || section->pageCount != 1) return;
+  imagePageOnScreen = false;
+  if (!section || section->isBuilding() || section->pageCount != 1) return;
   const auto page = section->loadPage(0);
-  if (!page || page->elements.size() != 1 || page->elements[0]->getTag() != TAG_PageImage) return;
-  splitSpread = static_cast<const PageImage*>(page->elements[0].get())->getImageBlock().isWide();
+  if (!page) return;
+  bool image = false;
+  bool text = false;
+  for (const auto& element : page->elements) {
+    if (element->getTag() == TAG_PageImage) {
+      image = true;
+    } else if (element->getTag() == TAG_PageLine) {
+      const auto* block = static_cast<const PageLine*>(element.get())->getBlock();
+      if (block && block->valid() && block->wordCount() > 0) text = true;
+    } else {
+      text = true;
+    }
+  }
+  imagePageOnScreen = image && !text;
+  splitSpread = spreadActive() && page->elements.size() == 1 && page->elements[0]->getTag() == TAG_PageImage &&
+                static_cast<const PageImage*>(page->elements[0].get())->getImageBlock().isWide();
+}
+
+void EpubReaderActivity::prefetchTrampoline(void* self) { static_cast<EpubReaderActivity*>(self)->prefetchLoop(); }
+
+void EpubReaderActivity::prefetchLoop() {
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    bool more = true;
+    while (more) {
+      {
+        RenderLock lock;  // waits while a page is being drawn
+        HalPowerManager::Lock powerLock;
+        more = prefetchStep();
+      }
+      vTaskDelay(pdMS_TO_TICKS(50));  // a page turn that is waiting gets the lock first
+    }
+    prefetchBusy = false;
+  }
+}
+
+// One piece of the idle preparation, under the RenderLock: the next file of the coming turn that is not prepared yet.
+// True when another file is left.
+bool EpubReaderActivity::prefetchStep() {
+  if (prefetchedFor != currentSpineIndex) {  // the loop starts a task for a file only once
+    prefetchedFor = currentSpineIndex;
+    prefetchDone = 0;
+  }
+  if (!epub || !section || section->isBuilding() || !imagePageOnScreen || buildViewportWidth <= 0) return false;
+  if (ESP.getFreeHeap() < RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() < BACKGROUND_BUILD_MIN_MAX_ALLOC) return false;
+  const int first = currentSpineIndex + (comicPaired() ? 2 : 1);
+  const int count = spreadActive() ? 2 : 1;
+  const ReaderRenderSpec spec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
+  for (int i = 0; i < count; i++) {
+    if (prefetchDone & (1u << i)) continue;
+    prefetchDone |= static_cast<uint8_t>(1u << i);
+    prefetchSpine(first + i, spec);
+    return i + 1 < count;
+  }
+  return false;
+}
+
+// Builds the chapter file's section if needed and, when it is one page of pictures, draws it with ImageBlock in
+// prefetch mode: the pictures are extracted and decoded into their pixel caches, and nothing reaches the screen.
+void EpubReaderActivity::prefetchSpine(const int spine, const ReaderRenderSpec& spec) {
+  if (!epub || spine < 0 || spine >= epub->getSpineItemsCount()) return;
+  const auto t0 = millis();
+  auto next = std::unique_ptr<Section>(new (std::nothrow) Section(epub, spine, renderer));
+  if (!next) return;
+  bool ready = next->loadSectionFile(spec) && !next->isPartial();
+  if (!ready) ready = next->createSectionFile(spec);  // no framebuffer loan: the page on the screen stays intact
+  if (!ready || next->pageCount != 1) return;
+  const auto page = next->loadPage(0);
+  if (!page) return;
+  for (const auto& element : page->elements) {
+    if (element->getTag() != TAG_PageImage) return;  // text on it: the real render does it
+  }
+  ImageBlock::clearRenderFailures();
+  ImageBlock::setPrefetch(true);
+  for (const auto& element : page->elements) {
+    auto* image = static_cast<PageImage*>(element.get());
+    if (spreadActive() && image->getImageBlock().isWide()) {
+      ImageBlock::setSplitView(0, viewMarginLeft, viewMarginTop, buildViewportWidth, buildViewportHeight);
+    }
+    image->render(renderer, SETTINGS.getReaderFontId(), viewMarginLeft, viewMarginTop);
+    ImageBlock::setSplitView(-1, 0, 0, 0, 0);
+  }
+  ImageBlock::setPrefetch(false);
+  ImageBlock::releaseRenderCache();
+  ImageBlock::clearRenderFailures();
+  LOG_DBG("ERS", "Prefetched file %d in %lums", spine, millis() - t0);
 }
 
 void EpubReaderActivity::resetComicPairing() {

@@ -5,6 +5,8 @@
 #include <Epub/Page.h>
 #include <Epub/PageLink.h>
 #include <Epub/Section.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <atomic>
 #include <memory>
@@ -214,6 +216,19 @@ class EpubReaderActivity final : public ReaderActivity {
   std::unique_ptr<Section> partnerSection;
   int partnerSpine = -1;               // spine index partnerSection was loaded for
   std::vector<int8_t> comicSpineKind;  // per spine item: -1 not looked at yet, 0 no, 1 a one-page image-only file
+  // Comics: while a page that is one picture is on the screen, a low-priority task prepares the pictures of the next
+  // turn (section file, extraction, decode into the pixel cache) so the turn only has to draw them.
+  TaskHandle_t prefetchTask = nullptr;
+  std::atomic<bool> prefetchBusy{false};
+  int prefetchedFor = -1;    // the chapter file whose next pictures were last prepared
+  uint8_t prefetchDone = 0;  // one bit per file of the next turn
+  bool imagePageOnScreen = false;
+  int viewMarginLeft = 0;  // where the page content starts on a screen, as renderBook() last drew it
+  int viewMarginTop = 0;
+  static void prefetchTrampoline(void* self);
+  void prefetchLoop();
+  bool prefetchStep();
+  void prefetchSpine(int spine, const ReaderRenderSpec& spec);
   bool splitSpread = false;  // the page is a double-page picture drawn across both screens (ImageBlock::setSplitView)
   bool comicPaired() const { return partnerSection && partnerSpine == currentSpineIndex + 1; }
   bool spineIsSingleImage(int spine, const ReaderRenderSpec& spec);

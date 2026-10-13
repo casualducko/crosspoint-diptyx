@@ -44,6 +44,9 @@ class ImageBlock final : public Block {
   // Diptyx two-page spread: a double-page picture (wider than tall) is drawn across both screens, its left half on the
   // left one and its right half on the right one. The reader sets the half (0 left, 1 right) and the content area of
   // one screen before it renders such a page, and clears it (half -1) afterwards.
+  // Idle preparation of a page that is not on the screen yet: while set, render() draws nothing and decodes a missing
+  // picture into its pixel cache only, so the real render finds it there.
+  static void setPrefetch(bool on);
   static void setSplitView(int half, int viewX, int viewY, int viewW, int viewH);
   bool isWide() const { return width * 5 >= height * 6; }
   bool serialize(HalFile& file);
