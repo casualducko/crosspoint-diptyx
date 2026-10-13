@@ -28,6 +28,7 @@ jobs:
         run: |
           python3 -m pip install -q numpy
           python3 diptyx/ci/test_comics_halftone.py
+          python3 diptyx/ci/test_content_bounds.py
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:

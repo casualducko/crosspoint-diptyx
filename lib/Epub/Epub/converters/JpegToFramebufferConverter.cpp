@@ -7,11 +7,14 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <new>
 
 #include "ComicsFrame.h"
+#include "ContentBounds.h"
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
@@ -30,6 +33,9 @@ struct JpegContext {
   // Source dimensions after JPEGDEC's built-in scaling
   int scaledSrcWidth{0};
   int scaledSrcHeight{0};
+  // Trim Margins: where the decoded rectangle starts in the scaled source (scaledSrcWidth/Height are its size).
+  int cropX0{0};
+  int cropY0{0};
 
   // Final output dimensions
   int dstWidth{0};
@@ -161,8 +167,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   GfxRenderer& renderer = *ctx->renderer;
   const int cfgX = ctx->config->x;
   const int cfgY = ctx->config->y;
-  const int blockX = pDraw->x;
-  const int blockY = pDraw->y;
+  const int blockX = pDraw->x - ctx->cropX0;
+  const int blockY = pDraw->y - ctx->cropY0;
 
   // Determine destination pixel range covered by this source block
   const int srcYEnd = blockY + blockH;
@@ -183,6 +189,8 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (ctx->screenWidth - cfgX < clampXMax) clampXMax = ctx->screenWidth - cfgX;
   if (dstXStart < -cfgX) dstXStart = -cfgX;
   if (dstXEnd > clampXMax) dstXEnd = clampXMax;
+  if (dstXStart < 0) dstXStart = 0;  // a block that starts left of the cropped rectangle
+  if (dstYStart < 0) dstYStart = 0;
 
   if (dstYStart >= dstYEnd || dstXStart >= dstXEnd) return 1;
 
@@ -430,6 +438,72 @@ bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePat
   return true;
 }
 
+namespace {
+
+// Trim Margins: copies the 1/8-scale gray page into a buffer.
+struct BoundsContext {
+  uint8_t* gray{nullptr};
+  int width{0};
+  int height{0};
+  uint32_t lastYieldMs{0};
+};
+
+int jpegBoundsCallback(JPEGDRAW* pDraw) {
+  auto* ctx = reinterpret_cast<BoundsContext*>(pDraw->pUser);
+  if (!ctx || !ctx->gray) return 0;
+  ImageToFramebufferDecoder::yieldDuringDecode(ctx->lastYieldMs);
+  const uint8_t* pixels = reinterpret_cast<const uint8_t*>(pDraw->pPixels);
+  for (int row = 0; row < pDraw->iHeight; row++) {
+    const int y = pDraw->y + row;
+    if (y < 0 || y >= ctx->height) continue;
+    for (int col = 0; col < pDraw->iWidthUsed; col++) {
+      const int x = pDraw->x + col;
+      if (x >= 0 && x < ctx->width)
+        ctx->gray[static_cast<size_t>(y) * ctx->width + x] = pixels[row * pDraw->iWidth + col];
+    }
+  }
+  return 1;
+}
+
+}  // namespace
+
+bool JpegToFramebufferConverter::findContentBounds(const std::string& imagePath, int& x0, int& y0, int& x1,
+                                                   int& y1) const {
+  x0 = y0 = x1 = y1 = 0;
+  if (ESP.getFreeHeap() < MIN_FREE_HEAP_FOR_JPEG) return false;
+  std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
+  if (!jpeg) return false;
+
+  BoundsContext ctx;
+  int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, jpegBoundsCallback);
+  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
+  if (rc != 1) return false;
+  ImageDimensions dims;
+  if (!validateAndStoreDimensions(jpeg->getWidth(), jpeg->getHeight(), dims, "JPEG")) return false;
+
+  ctx.width = (dims.width + 7) / 8;
+  ctx.height = (dims.height + 7) / 8;
+  const size_t bytes = static_cast<size_t>(ctx.width) * static_cast<size_t>(ctx.height);
+  ComicsHalftone::FramePtr gray(ComicsHalftone::allocFrame(bytes));  // PSRAM when there is some
+  if (!gray) return false;
+  memset(gray.get(), 255, bytes);
+  ctx.gray = gray.get();
+  ctx.lastYieldMs = millis();
+
+  jpeg->setPixelType(EIGHT_BIT_GRAYSCALE);
+  jpeg->setUserPointer(&ctx);
+  if (jpeg->decode(0, 0, JPEG_SCALE_EIGHTH) != 1) return false;
+
+  int bx0, by0, bx1, by1;
+  if (!ContentBounds::find(ctx.gray, ctx.width, ctx.height, bx0, by0, bx1, by1)) return false;
+  x0 = bx0 * 8;
+  y0 = by0 * 8;
+  x1 = std::min(bx1 * 8, static_cast<int>(dims.width));
+  y1 = std::min(by1 * 8, static_cast<int>(dims.height));
+  LOG_DBG("JPG", "Content bounds %d,%d - %d,%d of %dx%d", x0, y0, x1, y1, dims.width, dims.height);
+  return true;
+}
+
 bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
                                                      const RenderConfig& config) {
   LOG_DBG("JPG", "Decoding JPEG: %s", imagePath.c_str());
@@ -469,6 +543,16 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     LOG_INF("JPG", "Progressive JPEG detected - decoding DC coefficients only (lower quality)");
   }
 
+  // The part of the page to show: all of it, or the Trim Margins rectangle (x and y on a multiple of 8, so the scaled
+  // decode lines up with it).
+  int cropX = 0, cropY = 0, cropW = srcWidth, cropH = srcHeight;
+  if (config.cropW > 0 && config.cropH > 0) {
+    cropX = std::min((config.cropX / 8) * 8, srcWidth - 1);
+    cropY = std::min((config.cropY / 8) * 8, srcHeight - 1);
+    cropW = std::min(config.cropW, srcWidth - cropX);
+    cropH = std::min(config.cropH, srcHeight - cropY);
+  }
+
   // Calculate overall target scale
   float targetScale;
   int destWidth, destHeight;
@@ -476,15 +560,15 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   if (config.useExactDimensions && config.maxWidth > 0 && config.maxHeight > 0) {
     destWidth = config.maxWidth;
     destHeight = config.maxHeight;
-    targetScale = (float)destWidth / srcWidth;
+    targetScale = (float)destWidth / cropW;
   } else {
-    float scaleX = (config.maxWidth > 0 && srcWidth > config.maxWidth) ? (float)config.maxWidth / srcWidth : 1.0f;
-    float scaleY = (config.maxHeight > 0 && srcHeight > config.maxHeight) ? (float)config.maxHeight / srcHeight : 1.0f;
+    float scaleX = (config.maxWidth > 0 && cropW > config.maxWidth) ? (float)config.maxWidth / cropW : 1.0f;
+    float scaleY = (config.maxHeight > 0 && cropH > config.maxHeight) ? (float)config.maxHeight / cropH : 1.0f;
     targetScale = (scaleX < scaleY) ? scaleX : scaleY;
     if (targetScale > 1.0f) targetScale = 1.0f;
 
-    destWidth = (int)(srcWidth * targetScale);
-    destHeight = (int)(srcHeight * targetScale);
+    destWidth = (int)(cropW * targetScale);
+    destHeight = (int)(cropH * targetScale);
   }
 
   // Choose JPEGDEC built-in scaling for coarse downscaling.
@@ -506,8 +590,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
     return false;
   }
 
-  ctx.scaledSrcWidth = (srcWidth + jpegScaleDenom - 1) / jpegScaleDenom;
-  ctx.scaledSrcHeight = (srcHeight + jpegScaleDenom - 1) / jpegScaleDenom;
+  ctx.cropX0 = cropX / jpegScaleDenom;
+  ctx.cropY0 = cropY / jpegScaleDenom;
+  ctx.scaledSrcWidth = (cropW + jpegScaleDenom - 1) / jpegScaleDenom;
+  ctx.scaledSrcHeight = (cropH + jpegScaleDenom - 1) / jpegScaleDenom;
   ctx.dstWidth = destWidth;
   ctx.dstHeight = destHeight;
   ctx.fineScaleFPX = (int32_t)((int64_t)destWidth * FP_ONE / ctx.scaledSrcWidth);

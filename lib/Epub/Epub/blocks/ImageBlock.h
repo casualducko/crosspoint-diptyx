@@ -56,6 +56,7 @@ class ImageBlock final : public Block {
   int16_t height;
 
   void renderSplit(GfxRenderer& renderer);
+  bool renderTrimmed(GfxRenderer& renderer, int x, int y);
   bool ensureExtracted();
 
   static void* extractCtx;

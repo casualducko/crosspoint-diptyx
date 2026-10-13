@@ -55,6 +55,7 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
   if (BoardConfig::isDiptyx()) {
     items.push_back({MenuAction::IMAGE_DITHER, StrId::STR_IMAGE_DITHER});
     items.push_back({MenuAction::SPREAD_ORDER, StrId::STR_SPREAD_ORDER});
+    items.push_back({MenuAction::TRIM_MARGINS, StrId::STR_TRIM_MARGINS});
   }
   if (Frontlight.present()) {
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
@@ -141,6 +142,13 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
     return;
   }
 
+  if (selectedAction == MenuAction::TRIM_MARGINS) {
+    SETTINGS.trimMargins = SETTINGS.trimMargins == 0 ? 1 : 0;
+    SETTINGS.saveToFile();
+    requestUpdate();
+    return;
+  }
+
   if (selectedAction == MenuAction::NIGHT_MODE) {
     SETTINGS.screenInverted = SETTINGS.screenInverted == 0 ? 1 : 0;
     SETTINGS.saveToFile();
@@ -213,6 +221,8 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
     } else if (action == MenuAction::SPREAD_ORDER) {
       menuRowItems[i].value =
           I18N.get(spreadOrderLabels[std::min<size_t>(SETTINGS.spreadOrder, spreadOrderLabels.size() - 1)]);
+    } else if (action == MenuAction::TRIM_MARGINS) {
+      GUI.setCheckboxRow(menuRowItems[i], SETTINGS.trimMargins);
     } else if (action == MenuAction::NIGHT_MODE) {
       GUI.setCheckboxRow(menuRowItems[i], SETTINGS.screenInverted);
     } else if (action == MenuAction::FRONTLIGHT) {

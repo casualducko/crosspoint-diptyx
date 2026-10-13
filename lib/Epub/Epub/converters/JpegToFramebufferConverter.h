@@ -16,6 +16,8 @@ class JpegToFramebufferConverter final : public ImageToFramebufferDecoder {
     return getDimensionsStatic(imagePath, dims);
   }
 
+  bool findContentBounds(const std::string& imagePath, int& x0, int& y0, int& x1, int& y1) const override;
+
   static bool supportsFormat(const std::string& extension);
   const char* getFormatName() const override { return "JPEG"; }
 };

@@ -24,7 +24,9 @@ struct RenderConfig {
   float sourceCropY = 0.0f;         // Fraction cropped equally from the top and bottom edges
   bool preserveAlpha = false;       // Skip transparent pixels instead of compositing them against white
   std::string cachePath;            // If non-empty, decoder will write pixel cache to this path
-  bool cacheOnly = false;           // Write the pixel cache only: nothing is drawn, and the image may exceed the screen
+  int cropX = 0, cropY = 0, cropW = 0,
+      cropH = 0;           // JPEG: decode only this source rectangle (cropW 0: all); x, y: multiples of 8
+  bool cacheOnly = false;  // Write the pixel cache only: nothing is drawn, and the image may exceed the screen
 };
 
 class ImageToFramebufferDecoder {
@@ -36,6 +38,14 @@ class ImageToFramebufferDecoder {
   virtual bool getDimensions(const std::string& imagePath, ImageDimensions& dims) const = 0;
 
   virtual const char* getFormatName() const = 0;
+
+  // Diptyx Trim Margins: the box around the page's content, in source pixels (x0 <= x < x1). False when the format
+  // cannot tell (only JPEG can) or the page has no usable border (ContentBounds.h).
+  virtual bool findContentBounds(const std::string& imagePath, int& x0, int& y0, int& x1, int& y1) const {
+    (void)imagePath;
+    x0 = y0 = x1 = y1 = 0;
+    return false;
+  }
 
   // Call from per-row/per-MCU decode callbacks (free functions, hence public):
   // yields one tick at most every 250 ms so multi-second decodes keep the idle

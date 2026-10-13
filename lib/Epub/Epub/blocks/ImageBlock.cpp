@@ -36,13 +36,35 @@ bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str());
 
 namespace {
 
-std::string getCachePath(const std::string& imagePath, const bool wide = false) {
+// Trim Margins: the part of a page worth showing, kept next to the image (.bbx) so the page is measured once.
+struct TrimRect {
+  uint16_t x, y, w, h;  // source pixels; w == 0: the page is shown whole
+};
+
+std::string getTrimPath(const std::string& imagePath) {
+  const size_t dotPos = imagePath.rfind('.');
+  return (dotPos != std::string::npos ? imagePath.substr(0, dotPos) : imagePath) + ".bbx";
+}
+
+bool readTrim(const std::string& path, TrimRect& out) {
+  HalFile file;
+  if (!Storage.openFileForRead("IMG", path, file)) return false;
+  return file.read(&out, sizeof(out)) == static_cast<int>(sizeof(out));
+}
+
+void writeTrim(const std::string& path, const TrimRect& rect) {
+  HalFile file;
+  if (Storage.openFileForWrite("IMG", path, file)) file.write(&rect, sizeof(rect));
+}
+
+std::string getCachePath(const std::string& imagePath, const bool wide = false, const bool trimmed = false) {
   // Replace extension with .pxc (pixel cache). The Diptyx caches its 1-bit result as .pxe<mode>: the extension changes
   // whenever the dither or the downscale changes, and carries the Image Dithering choice, so a cache written by an
   // earlier dither or another mode is never reused.
   std::string ext = ".pxc";
   if (BoardConfig::isDiptyx()) ext = std::string(".pxe") + static_cast<char>('0' + (SETTINGS.imageDither % 10));
-  if (wide) ext += 'w';  // the double-page picture at two screens' width
+  if (wide) ext += 'w';     // the double-page picture at two screens' width
+  if (trimmed) ext += 't';  // Trim Margins: the page without its blank border
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
     return imagePath.substr(0, dotPos) + ext;
@@ -394,6 +416,77 @@ void ImageBlock::renderSplit(GfxRenderer& renderer) {
   renderer.preserveImagePolarity(clipX0, y, clipX1 - clipX0, wideH);
 }
 
+// Trim Margins: shows the part of the page that has content, as large as the page's box allows. False when the page is
+// to be shown whole (the setting is off, the format cannot be measured, or there is little border to cut).
+bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) {
+  const std::string trimPath = getTrimPath(imagePath);
+  TrimRect rect;
+  if (!readTrim(trimPath, rect)) {
+    ensureExtracted();
+    rect = {0, 0, 0, 0};
+    ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+    ImageDimensions dims;
+    int x0, y0, x1, y1;
+    if (decoder && decoder->getDimensions(imagePath, dims) && decoder->findContentBounds(imagePath, x0, y0, x1, y1)) {
+      // Worth it only when it cuts at least a tenth of the page and leaves a real picture.
+      const int64_t full = static_cast<int64_t>(dims.width) * dims.height;
+      const int64_t kept = static_cast<int64_t>(x1 - x0) * (y1 - y0);
+      if (kept * 10 <= full * 9 && (x1 - x0) * 5 >= dims.width * 2 && (y1 - y0) * 5 >= dims.height * 2) {
+        rect = {static_cast<uint16_t>(x0), static_cast<uint16_t>(y0), static_cast<uint16_t>(x1 - x0),
+                static_cast<uint16_t>(y1 - y0)};
+      }
+    }
+    writeTrim(trimPath, rect);
+  }
+  if (rect.w == 0 || rect.h == 0) return false;
+
+  // Fit the content into this page's box, centered.
+  int outW = width;
+  int outH = (static_cast<int>(rect.h) * width) / rect.w;
+  if (outH > height) {
+    outH = height;
+    outW = (static_cast<int>(rect.w) * height) / rect.h;
+  }
+  if (outW < 1 || outH < 1) return false;
+  const int outX = x + (width - outW) / 2;
+  const int outY = y + (height - outH) / 2;
+
+  if (!renderer.glyphIntersectsStrip(outX, outY, outX + outW - 1, outY + outH - 1)) return true;
+  if (imageFailedThisRender(imagePath)) return false;
+
+  const std::string cachePath = getCachePath(imagePath, false, true);
+  if (renderFromCache(renderer, cachePath, outX, outY, outW, outH)) {
+    renderer.preserveImagePolarity(outX, outY, outW, outH);
+    return true;
+  }
+  ensureExtracted();
+  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+  if (!decoder) return false;
+  RenderConfig config;
+  config.x = outX;
+  config.y = outY;
+  config.maxWidth = outW;
+  config.maxHeight = outH;
+  config.useGrayscale = true;
+  config.useDithering = true;
+  config.ditherMode = SETTINGS.imageDither;
+  config.useExactDimensions = true;
+  config.cachePath = cachePath;
+  config.cropX = rect.x;
+  config.cropY = rect.y;
+  config.cropW = rect.w;
+  config.cropH = rect.h;
+  LOG_DBG("IMG", "Decoding the trimmed page %dx%d from %u,%u %ux%u: %s", outW, outH, rect.x, rect.y, rect.w, rect.h,
+          imagePath.c_str());
+  if (!decoder->decodeToFramebuffer(imagePath, renderer, config)) {
+    LOG_ERR("IMG", "Failed to decode the trimmed page: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    return false;
+  }
+  renderer.preserveImagePolarity(outX, outY, outW, outH);
+  return true;
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
   // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
@@ -407,6 +500,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     renderSplit(renderer);
     return;
   }
+  if (BoardConfig::isDiptyx() && SETTINGS.trimMargins && renderTrimmed(renderer, x, y)) return;
 
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 

@@ -305,15 +305,17 @@ void EpubReaderActivity::openReaderMenu() {
   const int bookProgressPercent = bookPercentFor(position);
 
   const uint8_t ditherBefore = SETTINGS.imageDither;
+  const uint8_t trimBefore = SETTINGS.trimMargins;
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
                              bookProgressPercent, SETTINGS.orientation, pageHasFootnotes(), !cachedBookmarks.empty()),
-                         [this, ditherBefore](const ActivityResult& result) {
+                         [this, ditherBefore, trimBefore](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
 
                            // The menu's Image Dithering row changed it: the right page's key does not cover the dither,
                            // so redraw it (the left page is redrawn by the render that follows).
-                           if (SETTINGS.imageDither != ditherBefore) rightPageKey = 0;
+                           if (SETTINGS.imageDither != ditherBefore || SETTINGS.trimMargins != trimBefore)
+                             rightPageKey = 0;
 
                            if (SETTINGS.orientation != menu.orientation) {
                              applyOrientation(menu.orientation);
@@ -1026,6 +1028,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::IMAGE_DITHER:
     case EpubReaderMenuActivity::MenuAction::SPREAD_ORDER:
+    case EpubReaderMenuActivity::MenuAction::TRIM_MARGINS:
       break;  // handled inside the list menu; the toolbar's More panel does not offer them
   }
 }
@@ -2872,7 +2875,8 @@ void EpubReaderActivity::buildMoreActions() {
   moreItems.erase(std::remove_if(moreItems.begin(), moreItems.end(),
                                  [](const auto& item) {
                                    return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS ||
-                                          item.action == MA::IMAGE_DITHER || item.action == MA::SPREAD_ORDER;
+                                          item.action == MA::IMAGE_DITHER || item.action == MA::SPREAD_ORDER ||
+                                          item.action == MA::TRIM_MARGINS;
                                  }),
                   moreItems.end());
 }

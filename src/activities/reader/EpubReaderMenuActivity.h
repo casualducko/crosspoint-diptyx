@@ -29,7 +29,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     DELETE_CACHE,
     DICTIONARY,
     IMAGE_DITHER,  // Diptyx: picks the image dither inside the menu, like Night Mode
-    SPREAD_ORDER   // Diptyx: picks the spread order inside the menu, like Image Dithering
+    SPREAD_ORDER,  // Diptyx: picks the spread order inside the menu, like Image Dithering
+    TRIM_MARGINS   // Diptyx: toggles Trim Margins inside the menu, like Night Mode
   };
 
   struct MenuItem {
