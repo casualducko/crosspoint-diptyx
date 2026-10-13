@@ -230,7 +230,13 @@ class EpubReaderActivity final : public ReaderActivity {
   void prefetchLoop();
   bool prefetchStep();
   void prefetchSpine(int spine, const ReaderRenderSpec& spec);
-  bool splitSpread = false;  // the page is a double-page picture drawn across both screens (ImageBlock::setSplitView)
+  // Zoom Pages: the picture page on the screen is shown at up to twice the size, zoomRows views of it (top, bottom).
+  bool zoomActive = false;
+  int zoomRow = 0;
+  int zoomRows = 1;
+  int zoomSpine = -1;          // the chapter file zoomRow belongs to
+  bool zoomEnterLast = false;  // going back onto a page: start at its last view
+  bool splitSpread = false;    // the page is a double-page picture drawn across both screens (ImageBlock::setSplitView)
   bool comicPaired() const { return partnerSection && partnerSpine == currentSpineIndex + 1; }
   bool spineIsSingleImage(int spine, const ReaderRenderSpec& spec);
   bool updateComicPartner(const ReaderRenderSpec& spec);

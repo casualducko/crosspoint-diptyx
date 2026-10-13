@@ -297,6 +297,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t imageDither = DITHER_ORDERED;
   // Diptyx: show the part of a comic page that has content, without its blank border
   uint8_t trimMargins = 0;
+  // Diptyx: show a comic page at twice the size across both screens, top half then bottom half
+  uint8_t zoomPages = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // X4 Pro: double-click power toggles the frontlight. Disabling frees the

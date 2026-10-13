@@ -48,6 +48,13 @@ class ImageBlock final : public Block {
   // Idle preparation of a page that is not on the screen yet: while set, render() draws nothing and decodes a missing
   // picture into its pixel cache only, so the real render finds it there.
   static void setPrefetch(bool on);
+
+  // Diptyx Zoom: a one-picture page is shown at up to twice the size across both screens: the canvas of two screens
+  // wide and two tall holds the picture, and a screen shows its half (0 left, 1 right) of the top view (row 0) or of
+  // the bottom view (row 1). The reader sets it like setSplitView() before it renders such a page, half -1 clears it.
+  static void setZoomView(int half, int row, int viewX, int viewY, int viewW, int viewH);
+  // How many views (1 or 2) the zoomed picture needs for screens viewW x viewH; may measure the page (Trim Margins).
+  int zoomRows(int viewW, int viewH) const;
   // While prefetching, the work stops before its next slow step (extraction, decode) once this flag is set.
   static void setPrefetchStop(const std::atomic<bool>* stop);
   static void setSplitView(int half, int viewX, int viewY, int viewW, int viewH);
@@ -61,9 +68,17 @@ class ImageBlock final : public Block {
   int16_t width;
   int16_t height;
 
+  struct ZoomLayout {
+    int cropX, cropY, cropW, cropH;  // the part of the source shown (cropW 0: all of it)
+    int zoomW, zoomH;                // the picture's size on the canvas
+    int rows;
+  };
   void renderSplit(GfxRenderer& renderer);
+  void renderZoomed(GfxRenderer& renderer);
   bool renderTrimmed(GfxRenderer& renderer, int x, int y);
-  bool ensureExtracted();
+  bool ensureExtracted() const;
+  bool contentRect(int& x, int& y, int& w, int& h) const;
+  ZoomLayout computeZoom(int viewW, int viewH) const;
 
   static void* extractCtx;
   static ExtractFn extractFn;

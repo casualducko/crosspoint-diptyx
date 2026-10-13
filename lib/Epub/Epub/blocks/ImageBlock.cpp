@@ -66,14 +66,13 @@ void writeTrim(const std::string& path, const TrimRect& rect) {
   if (Storage.openFileForWrite("IMG", path, file)) file.write(&rect, sizeof(rect));
 }
 
-std::string getCachePath(const std::string& imagePath, const bool wide = false, const bool trimmed = false) {
+std::string getCachePath(const std::string& imagePath, const char* suffix = "") {
   // Replace extension with .pxc (pixel cache). The Diptyx caches its 1-bit result as .pxe<mode>: the extension changes
   // whenever the dither or the downscale changes, and carries the Image Dithering choice, so a cache written by an
   // earlier dither or another mode is never reused.
   std::string ext = ".pxc";
   if (BoardConfig::isDiptyx()) ext = std::string(".pxe") + static_cast<char>('0' + (SETTINGS.imageDither % 10));
-  if (wide) ext += 'w';     // the double-page picture at two screens' width
-  if (trimmed) ext += 't';  // Trim Margins: the page without its blank border
+  ext += suffix;  // w: double-page picture at two screens' width; t: Trim Margins; z: Zoom (zt: both)
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
     return imagePath.substr(0, dotPos) + ext;
@@ -227,7 +226,8 @@ void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y, const int clipX0
 
 // Draws the cached image with its top left at (x, y); only the columns with clipX0 <= screen x < clipX1 are written.
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
-                     int expectedHeight, const int clipX0 = INT16_MIN, const int clipX1 = INT16_MAX) {
+                     int expectedHeight, const int clipX0 = INT16_MIN, const int clipX1 = INT16_MAX,
+                     const int rowStart = 0, const int rowEnd = INT16_MAX) {
   if (prefetching) {  // nothing to draw: only say whether a valid cache is there
     HalFile file;
     uint16_t w, h;
@@ -237,7 +237,8 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   // A later pass of the same page render: the payload is already in RAM, skip
   // the file entirely.
   const uint64_t cacheHash = imagePathHash(cachePath);
-  if (pxcSlotHash == cacheHash && pxcSlotWidth != 0) {
+  const bool windowed = rowStart > 0 || rowEnd < INT16_MAX;  // a window of rows streams from the file
+  if (!windowed && pxcSlotHash == cacheHash && pxcSlotWidth != 0) {
     renderRowsFromPxcSlot(renderer, x, y, clipX0, clipX1);
     return true;
   }
@@ -264,15 +265,18 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   // here would make 2+ image pages reload each other from SD on every pass
   // (all the SD traffic of streaming plus the slot alloc churn); instead later
   // images take the streaming path below, unchanged from pre-cache behavior.
-  if (pxcSlotHash == 0 && loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
+  if (!windowed && pxcSlotHash == 0 && loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
     renderRowsFromPxcSlot(renderer, x, y, clipX0, clipX1);
     LOG_DBG("IMG", "Cache render complete (payload now in RAM)");
     return true;
   }
 
   // Streaming fallback (slot didn't fit). A failed slot load may have consumed
-  // part of the payload; rewind to just past the header.
-  cacheFile.seek(4);
+  // part of the payload; rewind to just past the header (or to the window's first row).
+  const int firstRow = std::max(0, rowStart);
+  const int lastRow = std::min<int>(cachedHeight, rowEnd);
+  if (firstRow >= lastRow) return true;
+  cacheFile.seek(4 + static_cast<size_t>(firstRow) * bytesPerRow);
 
   // Read several rows per SD access. A one-row-per-read loop here means
   // cachedHeight (~728) tiny reads through the storage mutex + SdFat; batching
@@ -297,9 +301,9 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
   int rowsInBuffer = 0;
   int bufferRow = 0;
-  for (int row = 0; row < cachedHeight; row++) {
+  for (int row = firstRow; row < lastRow; row++) {
     if (bufferRow >= rowsInBuffer) {
-      const int toRead = (cachedHeight - row < rowsPerRead) ? (cachedHeight - row) : rowsPerRead;
+      const int toRead = (lastRow - row < rowsPerRead) ? (lastRow - row) : rowsPerRead;
       const size_t bytes = (size_t)toRead * bytesPerRow;
       if (cacheFile.read(readBuffer, bytes) != static_cast<int>(bytes)) {
         LOG_ERR("IMG", "Cache read error at row %d", row);
@@ -362,7 +366,7 @@ void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int
   }
 }
 
-bool ImageBlock::ensureExtracted() {
+bool ImageBlock::ensureExtracted() const {
   if (srcPath.empty() || !extractFn || Storage.exists(imagePath.c_str())) return true;
   LOG_DBG("IMG", "Lazy-extracting %s -> %s", srcPath.c_str(), imagePath.c_str());
   if (!extractFn(extractCtx, srcPath.c_str(), imagePath.c_str())) {
@@ -405,7 +409,7 @@ void ImageBlock::renderSplit(GfxRenderer& renderer) {
   if (!renderer.glyphIntersectsStrip(clipX0, y, clipX1 - 1, y + wideH - 1)) return;
   if (imageFailedThisRender(imagePath)) return;
 
-  const std::string cachePath = getCachePath(imagePath, true);
+  const std::string cachePath = getCachePath(imagePath, "w");
   if (!renderFromCache(renderer, cachePath, x, y, wideW, wideH, clipX0, clipX1)) {
     ensureExtracted();
     if (prefetchShouldStop()) return;
@@ -416,8 +420,8 @@ void ImageBlock::renderSplit(GfxRenderer& renderer) {
       return;
     }
     RenderConfig config;
-    config.x = x;
-    config.y = y;
+    config.x = 0;  // the picture is decoded at a virtual origin: it may start off the screen
+    config.y = 0;
     config.maxWidth = wideW;
     config.maxHeight = wideH;
     config.useGrayscale = true;
@@ -437,9 +441,11 @@ void ImageBlock::renderSplit(GfxRenderer& renderer) {
   preservePolarity(renderer, clipX0, y, clipX1 - clipX0, wideH);
 }
 
-// Trim Margins: shows the part of the page that has content, as large as the page's box allows. False when the page is
-// to be shown whole (the setting is off, the format cannot be measured, or there is little border to cut).
-bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) {
+// Trim Margins: the part of the page worth showing, read from the .bbx file or measured once. False when the setting is
+// off, the format cannot be measured, or there is little border to cut: the page is shown whole.
+bool ImageBlock::contentRect(int& rx, int& ry, int& rw, int& rh) const {
+  rx = ry = rw = rh = 0;
+  if (!BoardConfig::isDiptyx() || !SETTINGS.trimMargins) return false;
   const std::string trimPath = getTrimPath(imagePath);
   TrimRect rect;
   if (!readTrim(trimPath, rect)) {
@@ -461,6 +467,20 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
     writeTrim(trimPath, rect);
   }
   if (rect.w == 0 || rect.h == 0) return false;
+  rx = rect.x;
+  ry = rect.y;
+  rw = rect.w;
+  rh = rect.h;
+  return true;
+}
+
+// Trim Margins: shows the part of the page that has content, as large as the page's box allows. False when the page is
+// to be shown whole.
+bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) {
+  TrimRect rect;
+  int rx, ry, rw, rh;
+  if (!contentRect(rx, ry, rw, rh)) return false;
+  rect = {static_cast<uint16_t>(rx), static_cast<uint16_t>(ry), static_cast<uint16_t>(rw), static_cast<uint16_t>(rh)};
 
   // Fit the content into this page's box, centered.
   int outW = width;
@@ -476,7 +496,7 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
   if (!renderer.glyphIntersectsStrip(outX, outY, outX + outW - 1, outY + outH - 1)) return true;
   if (imageFailedThisRender(imagePath)) return false;
 
-  const std::string cachePath = getCachePath(imagePath, false, true);
+  const std::string cachePath = getCachePath(imagePath, "t");
   if (renderFromCache(renderer, cachePath, outX, outY, outW, outH)) {
     preservePolarity(renderer, outX, outY, outW, outH);
     return true;
@@ -511,6 +531,112 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
   return true;
 }
 
+namespace {
+int zoomHalf = -1;
+int zoomRow = 0;
+int zoomViewX = 0, zoomViewY = 0, zoomViewW = 0, zoomViewH = 0;
+}  // namespace
+
+void ImageBlock::setZoomView(const int half, const int row, const int viewX, const int viewY, const int viewW,
+                             const int viewH) {
+  zoomHalf = half;
+  zoomRow = row;
+  zoomViewX = viewX;
+  zoomViewY = viewY;
+  zoomViewW = viewW;
+  zoomViewH = viewH;
+}
+
+// The picture is fitted into a canvas of two content areas wide and two tall; when that leaves it no taller than one
+// area (plus an eighth) it is shrunk to one view, otherwise it needs two (top and bottom).
+ImageBlock::ZoomLayout ImageBlock::computeZoom(const int viewW, const int viewH) const {
+  ZoomLayout z{};
+  int rx, ry, rw, rh;
+  const bool cropped = contentRect(rx, ry, rw, rh);
+  if (cropped) {
+    z.cropX = rx;
+    z.cropY = ry;
+    z.cropW = rw;
+    z.cropH = rh;
+  }
+  const int srcW = cropped ? rw : std::max<int>(width, 1);  // the block's size gives the aspect when the page is whole
+  const int srcH = cropped ? rh : std::max<int>(height, 1);
+  int zw = 2 * viewW;
+  int zh = (2 * viewW * srcH) / srcW;
+  if (zh > 2 * viewH) {
+    zh = 2 * viewH;
+    zw = (2 * viewH * srcW) / srcH;
+  }
+  z.rows = 2;
+  if (zh <= viewH + viewH / 8) {
+    if (zh > viewH) {
+      zw = (zw * viewH) / zh;
+      zh = viewH;
+    }
+    z.rows = 1;
+  }
+  z.zoomW = std::max(zw, 2);
+  z.zoomH = std::max(zh, 1);
+  return z;
+}
+
+int ImageBlock::zoomRows(const int viewW, const int viewH) const { return computeZoom(viewW, viewH).rows; }
+
+void ImageBlock::renderZoomed(GfxRenderer& renderer) {
+  const ZoomLayout z = computeZoom(zoomViewW, zoomViewH);
+  if (prefetchShouldStop()) return;
+  const int half = z.zoomW / 2;
+  const int x = zoomHalf == 0 ? zoomViewX + zoomViewW - half : zoomViewX - half;
+  const int clipX0 = zoomHalf == 0 ? x : zoomViewX;
+  const int clipX1 = zoomHalf == 0 ? zoomViewX + zoomViewW : zoomViewX + (z.zoomW - half);
+  int winStart = 0;
+  int winEnd = z.zoomH;
+  int y = zoomViewY + (zoomViewH - z.zoomH) / 2;
+  if (z.rows == 2) {  // the second view is the bottom of the picture; the two overlap when it is short
+    winStart = zoomRow == 0 ? 0 : z.zoomH - zoomViewH;
+    winEnd = winStart + zoomViewH;
+    y = zoomViewY - winStart;
+  }
+  if (!renderer.glyphIntersectsStrip(clipX0, y + winStart, clipX1 - 1, y + winEnd - 1)) return;
+  if (imageFailedThisRender(imagePath)) return;
+
+  const std::string cachePath = getCachePath(imagePath, z.cropW > 0 ? "zt" : "z");
+  if (!renderFromCache(renderer, cachePath, x, y, z.zoomW, z.zoomH, clipX0, clipX1, winStart, winEnd)) {
+    ensureExtracted();
+    if (prefetchShouldStop()) return;
+    ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+    if (!decoder) {
+      LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
+      rememberImageFailure(imagePath);
+      return;
+    }
+    RenderConfig config;
+    config.x = 0;  // decoded at a virtual origin: the picture is larger than a screen
+    config.y = 0;
+    config.maxWidth = z.zoomW;
+    config.maxHeight = z.zoomH;
+    config.useGrayscale = true;
+    config.useDithering = true;
+    config.ditherMode = SETTINGS.imageDither;
+    config.useExactDimensions = true;
+    config.cachePath = cachePath;
+    config.cacheOnly = true;
+    config.cropX = z.cropX;
+    config.cropY = z.cropY;
+    config.cropW = z.cropW;
+    config.cropH = z.cropH;
+    LOG_DBG("IMG", "Decoding the zoomed page %dx%d (%d view%s): %s", z.zoomW, z.zoomH, z.rows, z.rows == 1 ? "" : "s",
+            imagePath.c_str());
+    if (!decoder->decodeToFramebuffer(imagePath, renderer, config) ||
+        !renderFromCache(renderer, cachePath, x, y, z.zoomW, z.zoomH, clipX0, clipX1, winStart, winEnd)) {
+      LOG_ERR("IMG", "Failed to draw the zoomed page: %s", imagePath.c_str());
+      rememberImageFailure(imagePath);
+      return;
+    }
+  }
+  preservePolarity(renderer, clipX0, y + winStart, clipX1 - clipX0, winEnd - winStart);
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
   // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
@@ -520,6 +646,10 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   FontCacheManager* fcm = renderer.getFontCacheManager();
   if (fcm && fcm->isScanning()) return;
 
+  if (zoomHalf >= 0) {
+    renderZoomed(renderer);
+    return;
+  }
   if (splitHalf >= 0 && isWide()) {
     renderSplit(renderer);
     return;

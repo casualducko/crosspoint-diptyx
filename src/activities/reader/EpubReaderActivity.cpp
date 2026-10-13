@@ -310,16 +310,20 @@ void EpubReaderActivity::openReaderMenu() {
 
   const uint8_t ditherBefore = SETTINGS.imageDither;
   const uint8_t trimBefore = SETTINGS.trimMargins;
+  const uint8_t zoomBefore = SETTINGS.zoomPages;
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
                              bookProgressPercent, SETTINGS.orientation, pageHasFootnotes(), !cachedBookmarks.empty()),
-                         [this, ditherBefore, trimBefore](const ActivityResult& result) {
+                         [this, ditherBefore, trimBefore, zoomBefore](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
 
                            // The menu's Image Dithering row changed it: the right page's key does not cover the dither,
                            // so redraw it (the left page is redrawn by the render that follows).
-                           if (SETTINGS.imageDither != ditherBefore || SETTINGS.trimMargins != trimBefore)
+                           if (SETTINGS.imageDither != ditherBefore || SETTINGS.trimMargins != trimBefore ||
+                               SETTINGS.zoomPages != zoomBefore) {
                              rightPageKey = 0;
+                             zoomSpine = -1;
+                           }
 
                            if (SETTINGS.orientation != menu.orientation) {
                              applyOrientation(menu.orientation);
@@ -1049,6 +1053,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::IMAGE_DITHER:
     case EpubReaderMenuActivity::MenuAction::SPREAD_ORDER:
     case EpubReaderMenuActivity::MenuAction::TRIM_MARGINS:
+    case EpubReaderMenuActivity::MenuAction::ZOOM_PAGES:
       break;  // handled inside the list menu; the toolbar's More panel does not offer them
   }
 }
@@ -1177,6 +1182,19 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     clearDeferredReposition();
   }
   const int step = spreadActive() ? 2 : 1;  // a spread shows two pages, so a turn moves two
+  // Zoom Pages: a zoomed picture page has more than one view.
+  if (zoomActive) {
+    if (isForwardTurn && zoomRow + 1 < zoomRows) {
+      zoomRow++;
+      lastPageTurnTime = millis();
+      return true;
+    }
+    if (!isForwardTurn && zoomRow > 0) {
+      zoomRow--;
+      lastPageTurnTime = millis();
+      return true;
+    }
+  }
   if (isForwardTurn) {
     if (section->currentPage + step < static_cast<int>(section->pageCount) || section->isBuilding()) {
       section->currentPage += step;
@@ -1205,7 +1223,8 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       pendingPageJump = std::numeric_limits<uint16_t>::max();
       // Back over a comic pair lands on the pair before it (pairs are files 1+2, 3+4 ... from where reading is).
       int back = 1;
-      if (spreadActive() && currentSpineIndex >= 2 && buildViewportWidth > 0) {
+      zoomEnterLast = spreadActive() && SETTINGS.zoomPages;
+      if (spreadActive() && !SETTINGS.zoomPages && currentSpineIndex >= 2 && buildViewportWidth > 0) {
         const ReaderRenderSpec spec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
         if (spineIsSingleImage(currentSpineIndex - 1, spec) && spineIsSingleImage(currentSpineIndex - 2, spec))
           back = 2;
@@ -1667,9 +1686,14 @@ void EpubReaderActivity::renderBook() {
 
     const auto start = millis();
     const bool leftRefreshIsFull = forcedRefreshPending || pagesUntilFullRefresh <= 1;  // as renderContents() decides
-    if (splitSpread) ImageBlock::setSplitView(0, orientedMarginLeft, orientedMarginTop, viewportWidth, viewportHeight);
+    if (zoomActive) {
+      ImageBlock::setZoomView(0, zoomRow, orientedMarginLeft, orientedMarginTop, viewportWidth, viewportHeight);
+    } else if (splitSpread) {
+      ImageBlock::setSplitView(0, orientedMarginLeft, orientedMarginTop, viewportWidth, viewportHeight);
+    }
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
+    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
@@ -2073,8 +2097,24 @@ void EpubReaderActivity::updateSplitSpread() {
     }
   }
   imagePageOnScreen = image && !text;
-  splitSpread = spreadActive() && page->elements.size() == 1 && page->elements[0]->getTag() == TAG_PageImage &&
-                static_cast<const PageImage*>(page->elements[0].get())->getImageBlock().isWide();
+  const bool onePicture = page->elements.size() == 1 && page->elements[0]->getTag() == TAG_PageImage;
+  const ImageBlock* picture =
+      onePicture ? &static_cast<const PageImage*>(page->elements[0].get())->getImageBlock() : nullptr;
+  zoomActive = spreadActive() && SETTINGS.zoomPages && picture && buildViewportWidth > 0;
+  if (zoomActive) {
+    zoomRows = picture->zoomRows(buildViewportWidth, buildViewportHeight);
+    if (zoomSpine != currentSpineIndex) {  // a new page: its first view, or its last when going back onto it
+      zoomRow = zoomEnterLast ? zoomRows - 1 : 0;
+      zoomSpine = currentSpineIndex;
+    }
+    zoomEnterLast = false;
+    zoomRow = std::clamp(zoomRow, 0, zoomRows - 1);
+  } else {
+    zoomRow = 0;
+    zoomRows = 1;
+    zoomSpine = -1;
+  }
+  splitSpread = zoomActive || (spreadActive() && picture && picture->isWide());
 }
 
 void EpubReaderActivity::prefetchTrampoline(void* self) { static_cast<EpubReaderActivity*>(self)->prefetchLoop(); }
@@ -2104,8 +2144,9 @@ bool EpubReaderActivity::prefetchStep() {
   }
   if (!epub || !section || section->isBuilding() || !imagePageOnScreen || buildViewportWidth <= 0) return false;
   if (ESP.getFreeHeap() < RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() < BACKGROUND_BUILD_MIN_MAX_ALLOC) return false;
+  const bool zoom = spreadActive() && SETTINGS.zoomPages;
   const int first = currentSpineIndex + (comicPaired() ? 2 : 1);
-  const int count = spreadActive() ? 2 : 1;
+  const int count = spreadActive() && !zoom ? 2 : 1;
   const ReaderRenderSpec spec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
   for (int i = 0; i < count; i++) {
     if (prefetchDone & (1u << i)) continue;
@@ -2136,11 +2177,14 @@ void EpubReaderActivity::prefetchSpine(const int spine, const ReaderRenderSpec& 
   ImageBlock::setPrefetch(true);
   for (const auto& element : page->elements) {
     auto* image = static_cast<PageImage*>(element.get());
-    if (spreadActive() && image->getImageBlock().isWide()) {
+    if (spreadActive() && SETTINGS.zoomPages && page->elements.size() == 1) {
+      ImageBlock::setZoomView(0, 0, viewMarginLeft, viewMarginTop, buildViewportWidth, buildViewportHeight);
+    } else if (spreadActive() && image->getImageBlock().isWide()) {
       ImageBlock::setSplitView(0, viewMarginLeft, viewMarginTop, buildViewportWidth, buildViewportHeight);
     }
     image->render(renderer, SETTINGS.getReaderFontId(), viewMarginLeft, viewMarginTop);
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
+    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0);
   }
   ImageBlock::setPrefetch(false);
   ImageBlock::setPrefetchStop(nullptr);
@@ -2196,7 +2240,9 @@ bool EpubReaderActivity::updateComicPartner(const ReaderRenderSpec& spec) {
     partnerSpine = -1;
     return false;
   };
-  if (!spreadActive() || !epub || !section || section->isBuilding() || section->pageCount != 1) return drop();
+  if (!spreadActive() || zoomActive || !epub || !section || section->isBuilding() || section->pageCount != 1) {
+    return drop();
+  }
   const int next = currentSpineIndex + 1;
   if (next >= epub->getSpineItemsCount()) return drop();
   if (partnerSection && partnerSpine == next) return true;
@@ -2244,7 +2290,8 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
         static_cast<uint32_t>(section->pageCount), static_cast<uint32_t>(fontId),
         static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(spreadRtl()),
         static_cast<uint32_t>(spreadRtl() && currentPageBookmarked),
-        static_cast<uint32_t>(partnerOnRight ? currentSpineIndex + 1 : 0), static_cast<uint32_t>(splitSpread)}) {
+        static_cast<uint32_t>(partnerOnRight ? currentSpineIndex + 1 : 0), static_cast<uint32_t>(splitSpread),
+        static_cast<uint32_t>(zoomActive ? 1 + zoomRow : 0)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
@@ -2263,13 +2310,18 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
     // Same two-pass sequence as renderContents(): scan for glyphs, prewarm, then the real draw.
     auto* fcm = renderer.getFontCacheManager();
     auto scope = fcm->createPrewarmScope();
-    if (splitSpread) ImageBlock::setSplitView(1, marginLeft, marginTop, buildViewportWidth, buildViewportHeight);
+    if (zoomActive) {
+      ImageBlock::setZoomView(1, zoomRow, marginLeft, marginTop, buildViewportWidth, buildViewportHeight);
+    } else if (splitSpread) {
+      ImageBlock::setSplitView(1, marginLeft, marginTop, buildViewportWidth, buildViewportHeight);
+    }
     rightPage->render(renderer, fontId, marginLeft, marginTop);
     renderStatusBar(1);
     scope.endScanAndPrewarm();
     renderer.clearScreen();
     rightPage->render(renderer, fontId, marginLeft, marginTop);
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
+    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0);
     renderStatusBar(1);
   };
 
@@ -2985,7 +3037,7 @@ void EpubReaderActivity::buildMoreActions() {
                                  [](const auto& item) {
                                    return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS ||
                                           item.action == MA::IMAGE_DITHER || item.action == MA::SPREAD_ORDER ||
-                                          item.action == MA::TRIM_MARGINS;
+                                          item.action == MA::TRIM_MARGINS || item.action == MA::ZOOM_PAGES;
                                  }),
                   moreItems.end());
 }
