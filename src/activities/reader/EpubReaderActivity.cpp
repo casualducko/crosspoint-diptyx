@@ -1025,7 +1025,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::IMAGE_DITHER:
-      break;  // handled inside the list menu; the toolbar's More panel does not offer it
+    case EpubReaderMenuActivity::MenuAction::SPREAD_ORDER:
+      break;  // handled inside the list menu; the toolbar's More panel does not offer them
   }
 }
 
@@ -2871,7 +2872,7 @@ void EpubReaderActivity::buildMoreActions() {
   moreItems.erase(std::remove_if(moreItems.begin(), moreItems.end(),
                                  [](const auto& item) {
                                    return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS ||
-                                          item.action == MA::IMAGE_DITHER;
+                                          item.action == MA::IMAGE_DITHER || item.action == MA::SPREAD_ORDER;
                                  }),
                   moreItems.end());
 }
