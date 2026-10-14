@@ -1687,13 +1687,16 @@ void EpubReaderActivity::renderBook() {
     const auto start = millis();
     const bool leftRefreshIsFull = forcedRefreshPending || pagesUntilFullRefresh <= 1;  // as renderContents() decides
     if (zoomActive) {
-      ImageBlock::setZoomView(0, zoomRow, orientedMarginLeft, orientedMarginTop, viewportWidth, viewportHeight);
+      int zoomCol, zoomRowOfCol;
+      zoomCell(zoomCol, zoomRowOfCol);
+      ImageBlock::setZoomView(0, zoomCol, zoomRowOfCol, 0, orientedMarginTop, renderer.getScreenWidth(),
+                              viewportHeight);
     } else if (splitSpread) {
       ImageBlock::setSplitView(0, orientedMarginLeft, orientedMarginTop, viewportWidth, viewportHeight);
     }
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
-    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0);
+    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0, 0);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
@@ -2102,7 +2105,8 @@ void EpubReaderActivity::updateSplitSpread() {
       onePicture ? &static_cast<const PageImage*>(page->elements[0].get())->getImageBlock() : nullptr;
   zoomActive = spreadActive() && SETTINGS.zoomPages && picture && buildViewportWidth > 0;
   if (zoomActive) {
-    zoomRows = picture->zoomRows(buildViewportWidth, buildViewportHeight);
+    picture->zoomViews(renderer.getScreenWidth(), buildViewportHeight, zoomCols, zoomRowsPerCol);
+    zoomRows = zoomCols * zoomRowsPerCol;
     if (zoomSpine != currentSpineIndex) {  // a new page: its first view, or its last when going back onto it
       zoomRow = zoomEnterLast ? zoomRows - 1 : 0;
       zoomSpine = currentSpineIndex;
@@ -2112,9 +2116,20 @@ void EpubReaderActivity::updateSplitSpread() {
   } else {
     zoomRow = 0;
     zoomRows = 1;
+    zoomCols = 1;
+    zoomRowsPerCol = 1;
     zoomSpine = -1;
   }
   splitSpread = zoomActive || (spreadActive() && picture && picture->isWide());
+}
+
+// A zoomed picture uses the whole width of each screen (no side margins), so it is as large as it can be.
+// The views of a zoomed picture go a column at a time, top then bottom: the left page of a double-page picture first,
+// or the right page first in a right-to-left book.
+void EpubReaderActivity::zoomCell(int& col, int& row) const {
+  const int step = zoomRow / zoomRowsPerCol;
+  row = zoomRow % zoomRowsPerCol;
+  col = spreadRtl() ? zoomCols - 1 - step : step;
 }
 
 void EpubReaderActivity::prefetchTrampoline(void* self) { static_cast<EpubReaderActivity*>(self)->prefetchLoop(); }
@@ -2178,13 +2193,13 @@ void EpubReaderActivity::prefetchSpine(const int spine, const ReaderRenderSpec& 
   for (const auto& element : page->elements) {
     auto* image = static_cast<PageImage*>(element.get());
     if (spreadActive() && SETTINGS.zoomPages && page->elements.size() == 1) {
-      ImageBlock::setZoomView(0, 0, viewMarginLeft, viewMarginTop, buildViewportWidth, buildViewportHeight);
+      ImageBlock::setZoomView(0, 0, 0, 0, viewMarginTop, renderer.getScreenWidth(), buildViewportHeight);
     } else if (spreadActive() && image->getImageBlock().isWide()) {
       ImageBlock::setSplitView(0, viewMarginLeft, viewMarginTop, buildViewportWidth, buildViewportHeight);
     }
     image->render(renderer, SETTINGS.getReaderFontId(), viewMarginLeft, viewMarginTop);
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
-    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0);
+    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0, 0);
   }
   ImageBlock::setPrefetch(false);
   ImageBlock::setPrefetchStop(nullptr);
@@ -2311,7 +2326,9 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
     auto* fcm = renderer.getFontCacheManager();
     auto scope = fcm->createPrewarmScope();
     if (zoomActive) {
-      ImageBlock::setZoomView(1, zoomRow, marginLeft, marginTop, buildViewportWidth, buildViewportHeight);
+      int zoomCol, zoomRowOfCol;
+      zoomCell(zoomCol, zoomRowOfCol);
+      ImageBlock::setZoomView(1, zoomCol, zoomRowOfCol, 0, marginTop, renderer.getScreenWidth(), buildViewportHeight);
     } else if (splitSpread) {
       ImageBlock::setSplitView(1, marginLeft, marginTop, buildViewportWidth, buildViewportHeight);
     }
@@ -2321,7 +2338,7 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
     renderer.clearScreen();
     rightPage->render(renderer, fontId, marginLeft, marginTop);
     ImageBlock::setSplitView(-1, 0, 0, 0, 0);
-    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0);
+    ImageBlock::setZoomView(-1, 0, 0, 0, 0, 0, 0);
     renderStatusBar(1);
   };
 

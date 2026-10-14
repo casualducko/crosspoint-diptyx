@@ -33,10 +33,10 @@ def compile_cli(tmp):
     return exe
 
 
-def run_cli(exe, g):
+def run_cli(exe, g, band=None):
     h, w = g.shape
     payload = f"{w} {h}\n".encode() + (" ".join(map(str, TONE)) + "\n").encode() + g.astype(np.uint8).tobytes()
-    p = subprocess.run([exe], input=payload, capture_output=True)
+    p = subprocess.run([exe] + ([str(band)] if band else []), input=payload, capture_output=True)
     assert p.returncode == 0, f"cli exited {p.returncode} for {w}x{h}"
     return np.frombuffer(p.stdout, dtype=np.uint8).reshape(h, w)
 
@@ -105,6 +105,34 @@ class ComicsHalftoneMatchesReference(unittest.TestCase):
         for h, w in [(40, 60), (64, 64), (33, 90)]:
             pool = np.array([255, 255, 255, 240, 0, 0, 148, 149, 150, 150, 151, 152, 153, 200])
             self.check(rng.choice(pool, (h, w)).astype(np.uint8))
+
+    def test_banded_matches_whole_page_except_error_diffusion(self):
+        """A page done in bands (processBanded) equals the whole-page result wherever the error diffusion did not
+        decide: the filters see the same pixels thanks to the 8-row margin. The error diffusion starts fresh at each
+        band, which may change shaded pixels near and below a seam."""
+        g = comic_like(300, 400, 11)
+        whole = run_cli(self.exe, g)
+        for band, limit in ((300 * 120, 0.02), (300 * 64, 0.04), (300 * 40, 0.06)):  # bands of 104, 48, 16 rows
+            banded = run_cli(self.exe, g, band)
+            self.assertTrue(set(np.unique(banded)) <= {0, 3})
+            diff = float(np.mean(banded != whole))
+            self.assertLess(diff, limit, f"band {band}: {diff:.3%} of the pixels differ")
+
+    def test_banded_with_a_page_that_fits_one_band(self):
+        g = comic_like(90, 70, 12)
+        self.assertTrue(np.array_equal(run_cli(self.exe, g, 90 * 1000), run_cli(self.exe, g)))
+
+    def test_banded_edges_are_identical(self):
+        """Pixels the edge mask decides (near strong edges) do not depend on the error diffusion at all."""
+        g = np.full((300, 200), 235, np.uint8)
+        for y in range(10, 290, 30):
+            g[y:y + 3, 20:180] = 0  # black lines across the page, over the seams
+        whole = run_cli(self.exe, g)
+        banded = run_cli(self.exe, g, 200 * 60)
+        near = np.zeros(g.shape, bool)
+        for y in range(10, 290, 30):
+            near[max(0, y - 2):y + 5, :] = True
+        self.assertTrue(np.array_equal(banded[near], whole[near]))
 
     def test_panel_sized_page(self):
         self.check(comic_like(432, 648, 9))

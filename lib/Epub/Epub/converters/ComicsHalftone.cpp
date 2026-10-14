@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 #include <memory>
 
@@ -265,6 +266,33 @@ bool process(const uint8_t* gray, const int width, const int height, const uint8
     for (int x = 0; x < w; x++) colSum[x] += add[x] - drop[x];
   }
   STAGE_MARK(3);
+  return true;
+}
+
+bool processBanded(uint8_t* gray, const int width, const int height, const uint8_t* toneLut,
+                   const size_t maxBandPixels) {
+  constexpr int HALO = 8;  // sharpen 2 + 13x13 mean 6
+  if (!gray || !toneLut || width <= 0 || height <= 0) return false;
+  const size_t w = static_cast<size_t>(width);
+  const int bandRows = std::max<int>(HALO * 2, static_cast<int>(maxBandPixels / w) - 2 * HALO);
+  const size_t maxRows = static_cast<size_t>(bandRows) + 2 * HALO;
+  auto saved = makeTemp<uint8_t>(HALO * w);  // the original rows above the next band
+  auto in = makeTemp<uint8_t>(maxRows * w);
+  auto out = makeTemp<uint8_t>(maxRows * w);
+  if (!saved || !in || !out) return false;
+
+  for (int r0 = 0; r0 < height; r0 += bandRows) {
+    const int r1 = std::min(height, r0 + bandRows);
+    const int top = r0 > 0 ? HALO : 0;
+    const int bottom = std::min(HALO, height - r1);
+    if (top) memcpy(in.get(), saved.get(), static_cast<size_t>(top) * w);
+    memcpy(in.get() + static_cast<size_t>(top) * w, gray + static_cast<size_t>(r0) * w,
+           static_cast<size_t>(r1 - r0 + bottom) * w);
+    if (!process(in.get(), width, top + (r1 - r0) + bottom, toneLut, out.get())) return false;
+    if (r1 < height) memcpy(saved.get(), gray + static_cast<size_t>(r1 - HALO) * w, HALO * w);
+    memcpy(gray + static_cast<size_t>(r0) * w, out.get() + static_cast<size_t>(top) * w,
+           static_cast<size_t>(r1 - r0) * w);
+  }
   return true;
 }
 

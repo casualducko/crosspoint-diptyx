@@ -21,6 +21,11 @@
 // per-pixel path would have: into the framebuffer and the pixel cache.
 namespace ComicsFrame {
 
+// About seven bytes per pixel (input, output, temporaries) must fit the PSRAM: pages above 1.2 MP go through in bands
+// of about 0.45 MP. The usual comic page, 0.25 MP, and the zoomed single page, 1.0 MP, are done whole.
+constexpr size_t BANDED_ABOVE_PIXELS = 1200000;
+constexpr size_t BAND_PIXELS = 450000;
+
 // Comics is a Diptyx 1-bit mode for opaque images that are dithered at all.
 inline bool wanted(const RenderConfig& config) {
   return BoardConfig::isDiptyx() && config.useDithering && !config.preserveAlpha &&
@@ -49,14 +54,23 @@ inline void finish(GfxRenderer& renderer, const RenderConfig& config, uint8_t* g
   for (int i = 0; i < 256; i++) tone[i] = bwToneCurve(static_cast<uint8_t>(i));
   const size_t bytes = static_cast<size_t>(width) * static_cast<size_t>(height);
   const unsigned long startMs = millis();
-  ComicsHalftone::FramePtr out(ComicsHalftone::allocFrame(bytes));
+  // A page of more than BANDED_ABOVE_PIXELS (a zoomed double-page picture) does not fit the halftone's temporaries in
+  // one piece: it is done in bands, in place.
+  const bool banded = bytes > BANDED_ABOVE_PIXELS;
+  ComicsHalftone::FramePtr out;
   const uint8_t* values = nullptr;
-  if (out && ComicsHalftone::process(gray, width, height, tone, out.get())) {
-    values = out.get();
+  if (banded) {
+    if (ComicsHalftone::processBanded(gray, width, height, tone, BAND_PIXELS)) values = gray;
+  } else {
+    out.reset(ComicsHalftone::allocFrame(bytes));
+    if (out && ComicsHalftone::process(gray, width, height, tone, out.get())) values = out.get();
+  }
+  if (values) {
     const uint32_t* st = ComicsHalftone::lastStageMicros();
-    LOG_DBG("CMX", "halftone %dx%d: %lu ms (sharpen %lu, edges %lu, mean %lu, decide %lu ms)", width, height,
-            millis() - startMs, static_cast<unsigned long>(st[0] / 1000), static_cast<unsigned long>(st[1] / 1000),
-            static_cast<unsigned long>(st[2] / 1000), static_cast<unsigned long>(st[3] / 1000));
+    LOG_DBG("CMX", "halftone %dx%d%s: %lu ms (sharpen %lu, edges %lu, mean %lu, decide %lu ms)", width, height,
+            banded ? " in bands" : "", millis() - startMs, static_cast<unsigned long>(st[0] / 1000),
+            static_cast<unsigned long>(st[1] / 1000), static_cast<unsigned long>(st[2] / 1000),
+            static_cast<unsigned long>(st[3] / 1000));
   } else {
     LOG_ERR("CMX", "Comics halftone unavailable, using a plain threshold");
     for (size_t i = 0; i < bytes; i++) gray[i] = gray[i] >= 140 ? 3 : 0;

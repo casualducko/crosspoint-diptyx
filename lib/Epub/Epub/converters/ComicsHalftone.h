@@ -23,6 +23,13 @@ namespace ComicsHalftone {
 // out untouched, when that could not be allocated or the size is not positive.
 bool process(const uint8_t* gray, int width, int height, const uint8_t* toneLut, uint8_t* out);
 
+// The same for a page too large to hold all the temporaries at once (about 7 bytes per pixel with the input and the
+// output): the page is done in bands of up to about maxBandPixels pixels, each with a margin of 8 rows from its
+// neighbours so the filters see what they would see in one piece, and the result replaces gray in place. Only the
+// error diffusion starts fresh at each band, so the result differs from process() by that and nothing else.
+// False, leaving the page in an unspecified state, when memory ran out.
+bool processBanded(uint8_t* gray, int width, int height, const uint8_t* toneLut, size_t maxBandPixels);
+
 // Microseconds the last process() spent in each of STAGE_COUNT stages (sharpen, edge mask, local mean, decide), for the
 // log; zeros when not running on the device.
 constexpr int STAGE_COUNT = 4;

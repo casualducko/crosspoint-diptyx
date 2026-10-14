@@ -533,13 +533,15 @@ bool ImageBlock::renderTrimmed(GfxRenderer& renderer, const int x, const int y) 
 
 namespace {
 int zoomHalf = -1;
+int zoomCol = 0;
 int zoomRow = 0;
 int zoomViewX = 0, zoomViewY = 0, zoomViewW = 0, zoomViewH = 0;
 }  // namespace
 
-void ImageBlock::setZoomView(const int half, const int row, const int viewX, const int viewY, const int viewW,
-                             const int viewH) {
+void ImageBlock::setZoomView(const int half, const int col, const int row, const int viewX, const int viewY,
+                             const int viewW, const int viewH) {
   zoomHalf = half;
+  zoomCol = col;
   zoomRow = row;
   zoomViewX = viewX;
   zoomViewY = viewY;
@@ -547,8 +549,9 @@ void ImageBlock::setZoomView(const int half, const int row, const int viewX, con
   zoomViewH = viewH;
 }
 
-// The picture is fitted into a canvas of two content areas wide and two tall; when that leaves it no taller than one
-// area (plus an eighth) it is shrunk to one view, otherwise it needs two (top and bottom).
+// The picture is fitted into a canvas of two content areas wide and two tall (a double-page picture: four wide, so that
+// each page of it gets the size a single page gets); when that leaves it no taller than one area (plus an eighth) it is
+// shrunk to one row, otherwise it needs two (top and bottom). Narrower than two areas, it needs one column.
 ImageBlock::ZoomLayout ImageBlock::computeZoom(const int viewW, const int viewH) const {
   ZoomLayout z{};
   int rx, ry, rw, rh;
@@ -561,10 +564,11 @@ ImageBlock::ZoomLayout ImageBlock::computeZoom(const int viewW, const int viewH)
   }
   const int srcW = cropped ? rw : std::max<int>(width, 1);  // the block's size gives the aspect when the page is whole
   const int srcH = cropped ? rh : std::max<int>(height, 1);
-  // The two views overlap by a sixteenth of a screen, so a line of text at the seam is whole in one of them.
+  const int canvasW = (srcW * 5 >= srcH * 6 ? 4 : 2) * viewW;
+  // The views overlap by a sixteenth of a screen, so a line of text at a seam is whole in one of them.
   const int canvasH = 2 * viewH - viewH / 16;
-  int zw = 2 * viewW;
-  int zh = (2 * viewW * srcH) / srcW;
+  int zw = canvasW;
+  int zh = (canvasW * srcH) / srcW;
   if (zh > canvasH) {
     zh = canvasH;
     zw = (canvasH * srcW) / srcH;
@@ -577,20 +581,28 @@ ImageBlock::ZoomLayout ImageBlock::computeZoom(const int viewW, const int viewH)
     }
     z.rows = 1;
   }
+  z.cols = zw > 2 * viewW ? 2 : 1;
   z.zoomW = std::max(zw, 2);
   z.zoomH = std::max(zh, 1);
   return z;
 }
 
-int ImageBlock::zoomRows(const int viewW, const int viewH) const { return computeZoom(viewW, viewH).rows; }
+void ImageBlock::zoomViews(const int viewW, const int viewH, int& cols, int& rows) const {
+  const ZoomLayout z = computeZoom(viewW, viewH);
+  cols = z.cols;
+  rows = z.rows;
+}
 
 void ImageBlock::renderZoomed(GfxRenderer& renderer) {
   const ZoomLayout z = computeZoom(zoomViewW, zoomViewH);
   if (prefetchShouldStop()) return;
-  const int half = z.zoomW / 2;
-  const int x = zoomHalf == 0 ? zoomViewX + zoomViewW - half : zoomViewX - half;
-  const int clipX0 = zoomHalf == 0 ? x : zoomViewX;
-  const int clipX1 = zoomHalf == 0 ? zoomViewX + zoomViewW : zoomViewX + (z.zoomW - half);
+  // Where the two screens' window starts on the picture: with one column the picture is centered on the hinge, with two
+  // the right column is the right-hand end (the columns overlap when the picture is narrower than four areas).
+  const int col = std::min(zoomCol, z.cols - 1);
+  const int windowX = z.cols == 1 ? z.zoomW / 2 - zoomViewW : (col == 0 ? 0 : z.zoomW - 2 * zoomViewW);
+  const int x = zoomViewX - windowX - (zoomHalf == 0 ? 0 : zoomViewW);
+  const int clipX0 = std::max(zoomViewX, x);
+  const int clipX1 = std::min(zoomViewX + zoomViewW, x + z.zoomW);
   int winStart = 0;
   int winEnd = z.zoomH;
   int y = zoomViewY + (zoomViewH - z.zoomH) / 2;
@@ -599,6 +611,7 @@ void ImageBlock::renderZoomed(GfxRenderer& renderer) {
     winEnd = winStart + zoomViewH;
     y = zoomViewY - winStart;
   }
+  if (clipX0 >= clipX1) return;
   if (!renderer.glyphIntersectsStrip(clipX0, y + winStart, clipX1 - 1, y + winEnd - 1)) return;
   if (imageFailedThisRender(imagePath)) return;
 

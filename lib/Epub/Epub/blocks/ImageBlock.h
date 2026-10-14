@@ -49,12 +49,14 @@ class ImageBlock final : public Block {
   // picture into its pixel cache only, so the real render finds it there.
   static void setPrefetch(bool on);
 
-  // Diptyx Zoom: a one-picture page is shown at up to twice the size across both screens: the canvas of two screens
-  // wide and two tall holds the picture, and a screen shows its half (0 left, 1 right) of the top view (row 0) or of
-  // the bottom view (row 1). The reader sets it like setSplitView() before it renders such a page, half -1 clears it.
-  static void setZoomView(int half, int row, int viewX, int viewY, int viewW, int viewH);
-  // How many views (1 or 2) the zoomed picture needs for screens viewW x viewH; may measure the page (Trim Margins).
-  int zoomRows(int viewW, int viewH) const;
+  // Diptyx Zoom: a one-picture page is shown at up to twice the size across both screens: a canvas two screens wide
+  // and two tall holds the picture (a double-page picture gets a canvas twice as wide, one page of it per two
+  // screens), and a screen shows its half (0 left, 1 right) of the view at (col, row). The reader sets it like
+  // setSplitView() before it renders such a page, half -1 clears it.
+  static void setZoomView(int half, int col, int row, int viewX, int viewY, int viewW, int viewH);
+  // How many view columns (1 or 2) and rows (1 or 2) the zoomed picture needs for screens viewW x viewH; may measure
+  // the page (Trim Margins).
+  void zoomViews(int viewW, int viewH, int& cols, int& rows) const;
   // While prefetching, the work stops before its next slow step (extraction, decode) once this flag is set.
   static void setPrefetchStop(const std::atomic<bool>* stop);
   static void setSplitView(int half, int viewX, int viewY, int viewW, int viewH);
@@ -71,7 +73,7 @@ class ImageBlock final : public Block {
   struct ZoomLayout {
     int cropX, cropY, cropW, cropH;  // the part of the source shown (cropW 0: all of it)
     int zoomW, zoomH;                // the picture's size on the canvas
-    int rows;
+    int cols, rows;
   };
   void renderSplit(GfxRenderer& renderer);
   void renderZoomed(GfxRenderer& renderer);
