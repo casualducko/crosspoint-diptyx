@@ -57,7 +57,6 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
     items.push_back({MenuAction::SPREAD_ORDER, StrId::STR_SPREAD_ORDER});
     items.push_back({MenuAction::TRIM_MARGINS, StrId::STR_TRIM_MARGINS});
     items.push_back({MenuAction::ZOOM_PAGES, StrId::STR_ZOOM_PAGES});
-    if (SETTINGS.zoomPages) items.push_back({MenuAction::MOVE_PAGE, StrId::STR_MOVE_PAGE});
   }
   if (Frontlight.present()) {
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
@@ -72,6 +71,8 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   items.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
+  // Last, so Up from the top row reaches it.
+  if (BoardConfig::isDiptyx() && SETTINGS.zoomPages) items.push_back({MenuAction::MOVE_PAGE, StrId::STR_MOVE_PAGE});
 }
 
 void EpubReaderMenuActivity::closeCancelled() {
