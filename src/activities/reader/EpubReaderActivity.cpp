@@ -1052,6 +1052,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::IMAGE_DITHER:
     case EpubReaderMenuActivity::MenuAction::SPREAD_ORDER:
+    case EpubReaderMenuActivity::MenuAction::MOVE_PAGE:
+      if (zoomActive) {
+        panMode = !panMode;
+        requestUpdate();
+      }
+      break;
     case EpubReaderMenuActivity::MenuAction::TRIM_MARGINS:
     case EpubReaderMenuActivity::MenuAction::ZOOM_PAGES:
       break;  // handled inside the list menu; the toolbar's More panel does not offer them
@@ -1184,12 +1190,24 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
   const int step = spreadActive() ? 2 : 1;  // a spread shows two pages, so a turn moves two
   // Zoom Pages: a zoomed picture page has more than one view.
   if (zoomActive) {
+    if (panMode) {  // a press moves the picture; at its end the press turns as usual
+      const int moved =
+          std::clamp(zoomPan + (isForwardTurn ? 1 : -1) * (renderer.getScreenWidth() / 3), zoomPanLo, zoomPanHi);
+      if (moved != zoomPan) {
+        zoomPan = moved;
+        lastPageTurnTime = millis();
+        return true;
+      }
+      panMode = false;
+    }
     if (isForwardTurn && zoomRow + 1 < zoomRows) {
+      zoomPan = 0;
       zoomRow++;
       lastPageTurnTime = millis();
       return true;
     }
     if (!isForwardTurn && zoomRow > 0) {
+      zoomPan = 0;
       zoomRow--;
       lastPageTurnTime = millis();
       return true;
@@ -2110,11 +2128,23 @@ void EpubReaderActivity::updateSplitSpread() {
     if (zoomSpine != currentSpineIndex) {  // a new page: its first view, or its last when going back onto it
       zoomRow = zoomEnterLast ? zoomRows - 1 : 0;
       zoomSpine = currentSpineIndex;
+      zoomPan = 0;
+      panMode = false;
     }
     zoomEnterLast = false;
     zoomRow = std::clamp(zoomRow, 0, zoomRows - 1);
+    {
+      int zoomCol, zoomRowOfCol;
+      zoomCell(zoomCol, zoomRowOfCol);
+      picture->zoomPanRange(renderer.getScreenWidth(), buildViewportHeight, zoomCol, zoomPanLo, zoomPanHi);
+      zoomPan = std::clamp(zoomPan, zoomPanLo, zoomPanHi);
+    }
+    ImageBlock::setZoomPan(zoomPan);
   } else {
     zoomRow = 0;
+    zoomPan = 0;
+    panMode = false;
+    ImageBlock::setZoomPan(0);
     zoomRows = 1;
     zoomCols = 1;
     zoomRowsPerCol = 1;
@@ -2306,7 +2336,7 @@ void EpubReaderActivity::renderSpreadRightPage(const int marginTop, const int ma
         static_cast<uint32_t>(SETTINGS.screenMargin), static_cast<uint32_t>(spreadRtl()),
         static_cast<uint32_t>(spreadRtl() && currentPageBookmarked),
         static_cast<uint32_t>(partnerOnRight ? currentSpineIndex + 1 : 0), static_cast<uint32_t>(splitSpread),
-        static_cast<uint32_t>(zoomActive ? 1 + zoomRow : 0)}) {
+        static_cast<uint32_t>(zoomActive ? 1 + zoomRow : 0), static_cast<uint32_t>(zoomPan + 100000)}) {
     key = (key ^ v) * 16777619u;
   }
   if (key == 0) key = 1;
@@ -2398,6 +2428,7 @@ void EpubReaderActivity::renderStatusBar(const int pageOffsetOnPanel) const {
   if (zoomActive && zoomRows > 1) {
     const std::string view = std::to_string(zoomRow + 1) + "/" + std::to_string(zoomRows);
     title = title.empty() ? view : title + " " + view;
+    if (panMode) title += " <>";
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true,

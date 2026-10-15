@@ -57,6 +57,7 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
     items.push_back({MenuAction::SPREAD_ORDER, StrId::STR_SPREAD_ORDER});
     items.push_back({MenuAction::TRIM_MARGINS, StrId::STR_TRIM_MARGINS});
     items.push_back({MenuAction::ZOOM_PAGES, StrId::STR_ZOOM_PAGES});
+    if (SETTINGS.zoomPages) items.push_back({MenuAction::MOVE_PAGE, StrId::STR_MOVE_PAGE});
   }
   if (Frontlight.present()) {
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});

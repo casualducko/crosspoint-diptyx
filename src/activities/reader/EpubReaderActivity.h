@@ -237,7 +237,11 @@ class EpubReaderActivity final : public ReaderActivity {
   int zoomRows = 1;
   int zoomCols = 1;
   int zoomRowsPerCol = 1;
-  int zoomSpine = -1;          // the chapter file zoomRow belongs to
+  int zoomSpine = -1;    // the chapter file zoomRow belongs to
+  bool panMode = false;  // the page buttons move the zoomed picture sideways instead of turning
+  int zoomPan = 0;       // how far the picture is moved (pixels, right is positive)
+  int zoomPanLo = 0;     // the range of zoomPan for the current view
+  int zoomPanHi = 0;
   bool zoomEnterLast = false;  // going back onto a page: start at its last view
   bool splitSpread = false;    // the page is a double-page picture drawn across both screens (ImageBlock::setSplitView)
   bool comicPaired() const { return partnerSection && partnerSpine == currentSpineIndex + 1; }

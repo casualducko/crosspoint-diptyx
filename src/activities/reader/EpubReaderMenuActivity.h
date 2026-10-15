@@ -31,7 +31,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     IMAGE_DITHER,  // Diptyx: picks the image dither inside the menu, like Night Mode
     SPREAD_ORDER,  // Diptyx: picks the spread order inside the menu, like Image Dithering
     TRIM_MARGINS,  // Diptyx: toggles Trim Margins inside the menu, like Night Mode
-    ZOOM_PAGES     // Diptyx: toggles Zoom Pages inside the menu, like Night Mode
+    ZOOM_PAGES,    // Diptyx: toggles Zoom Pages inside the menu, like Night Mode
+    MOVE_PAGE      // Diptyx: the page buttons move a zoomed picture sideways (closes the menu)
   };
 
   struct MenuItem {
@@ -53,7 +54,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // fixed-capacity array avoids any heap allocation for the row list. Labels
   // are set once in the constructor (buildMenuRowItems()); buildScreen()
   // only refreshes rows whose values reflect live state.
-  static constexpr size_t MAX_MENU_ITEMS = 16;
+  static constexpr size_t MAX_MENU_ITEMS = 24;
   freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
   void buildMenuRowItems();
 

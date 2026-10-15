@@ -57,6 +57,10 @@ class ImageBlock final : public Block {
   // How many view columns (1 or 2) and rows (1 or 2) the zoomed picture needs for screens viewW x viewH; may measure
   // the page (Trim Margins).
   void zoomViews(int viewW, int viewH, int& cols, int& rows) const;
+  // The picture is moved sideways by this much (pixels of the zoomed canvas) while drawn zoomed.
+  static void setZoomPan(int pan);
+  // How far the picture can be moved from where view column col puts it: lo <= 0 <= hi.
+  void zoomPanRange(int viewW, int viewH, int col, int& lo, int& hi) const;
   // While prefetching, the work stops before its next slow step (extraction, decode) once this flag is set.
   static void setPrefetchStop(const std::atomic<bool>* stop);
   static void setSplitView(int half, int viewX, int viewY, int viewW, int viewH);

@@ -536,6 +536,7 @@ int zoomHalf = -1;
 int zoomCol = 0;
 int zoomRow = 0;
 int zoomViewX = 0, zoomViewY = 0, zoomViewW = 0, zoomViewH = 0;
+int zoomPan = 0;
 }  // namespace
 
 void ImageBlock::setZoomView(const int half, const int col, const int row, const int viewX, const int viewY,
@@ -587,6 +588,23 @@ ImageBlock::ZoomLayout ImageBlock::computeZoom(const int viewW, const int viewH)
   return z;
 }
 
+void ImageBlock::setZoomPan(const int pan) { zoomPan = pan; }
+
+// The window of the two screens may move within the picture; a picture narrower than the two screens may be moved by
+// half a screen either way.
+void ImageBlock::zoomPanRange(const int viewW, const int viewH, const int col, int& lo, int& hi) const {
+  const ZoomLayout z = computeZoom(viewW, viewH);
+  if (z.cols == 1) {
+    lo = -viewW / 2;
+    hi = viewW / 2;
+    return;
+  }
+  const int maxWindow = z.zoomW - 2 * viewW;
+  const int base = std::min(col, z.cols - 1) == 0 ? 0 : maxWindow;
+  lo = -base;
+  hi = maxWindow - base;
+}
+
 void ImageBlock::zoomViews(const int viewW, const int viewH, int& cols, int& rows) const {
   const ZoomLayout z = computeZoom(viewW, viewH);
   cols = z.cols;
@@ -600,7 +618,7 @@ void ImageBlock::renderZoomed(GfxRenderer& renderer) {
   // the right column is the right-hand end (the columns overlap when the picture is narrower than four areas).
   const int col = std::min(zoomCol, z.cols - 1);
   const int windowX = z.cols == 1 ? z.zoomW / 2 - zoomViewW : (col == 0 ? 0 : z.zoomW - 2 * zoomViewW);
-  const int x = zoomViewX - windowX - (zoomHalf == 0 ? 0 : zoomViewW);
+  const int x = zoomViewX - windowX - zoomPan - (zoomHalf == 0 ? 0 : zoomViewW);
   const int clipX0 = std::max(zoomViewX, x);
   const int clipX1 = std::min(zoomViewX + zoomViewW, x + z.zoomW);
   int winStart = 0;
