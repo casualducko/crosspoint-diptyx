@@ -18,6 +18,7 @@ void Session::start(const Config& config, uint32_t nowMs) {
   haveRemote = false;
   remoteDelivered = true;
   sleepRequested = false;
+  bookRequested = false;
   sendHello(nowMs);
 }
 
@@ -67,7 +68,15 @@ void Session::update(uint32_t nowMs) {
   if (currentStatus == Status::Linked && nowMs - lastRx >= LOST_AFTER_MS) currentStatus = Status::Lost;
 
   const uint32_t helloEvery = currentStatus == Status::Linked ? HELLO_LINKED_MS : HELLO_PAIRING_MS;
-  if (nowMs - lastHelloTx >= helloEvery) sendHello(nowMs);
+  if (nowMs - lastHelloTx >= helloEvery) {
+    sendHello(nowMs);
+    // The right unit has another book (or none) open: tell it which one this unit has.
+    if (cfg.role == Role::Left && currentStatus == Status::Incompatible && (reasons & INCOMPATIBLE_BOOK) &&
+        !bookPath.empty()) {
+      uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+      sendBytes(buf, encode(Type::Book, reinterpret_cast<const uint8_t*>(bookPath.data()), bookPath.size(), buf));
+    }
+  }
 
   if (haveSent && !acked && canSendState() && nowMs - lastStateTx >= RESEND_MS) sendPageState(nowMs);
 }
@@ -124,6 +133,12 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
       lastRx = nowMs;
       sleepRequested = true;
       return;
+    case Type::Book:
+      if (cfg.role != Role::Right || f.len == 0) return;
+      lastRx = nowMs;
+      requestedPath.assign(reinterpret_cast<const char*>(f.payload), f.len);
+      bookRequested = true;
+      return;
     case Type::Key:
       return;
   }
@@ -136,6 +151,15 @@ void Session::publish(uint16_t spine, uint16_t page, uint32_t nowMs) {
   haveSent = true;
   acked = false;
   if (canSendState()) sendPageState(nowMs);
+}
+
+void Session::setBookPath(const std::string& path) { bookPath = path.size() <= MAX_PAYLOAD ? path : std::string(); }
+
+bool Session::takeBookRequest(std::string& path) {
+  if (!bookRequested) return false;
+  bookRequested = false;
+  path = requestedPath;
+  return true;
 }
 
 bool Session::takeRemote(PageState& out) {

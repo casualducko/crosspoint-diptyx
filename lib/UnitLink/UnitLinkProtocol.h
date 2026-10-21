@@ -10,9 +10,9 @@
 namespace unitlink {
 
 constexpr uint8_t SOF = 0xA5;
-constexpr size_t MAX_PAYLOAD = 32;
+constexpr size_t MAX_PAYLOAD = 200;  // room for a book path
 constexpr size_t FRAME_OVERHEAD = 5;
-constexpr uint8_t PROTOCOL_VERSION = 1;
+constexpr uint8_t PROTOCOL_VERSION = 2;
 
 enum class Type : uint8_t {
   Hello = 1,  // pairing and heartbeat: role, version, book id, layout hash, whether the sender considers itself linked
@@ -20,7 +20,31 @@ enum class Type : uint8_t {
   Key = 3,    // reserved: a forwarded button press
   Sleep = 4,  // both units go to sleep
   Ack = 5,    // echoes the seq of a State
+  Book = 6,   // left -> right: path of the open book, repeated while the right unit has another one open
 };
+
+constexpr size_t HELLO_LEN = 11;
+constexpr size_t PAGE_STATE_LEN = 6;
+
+// Every message has a fixed payload size except Book (a path). Checking the size as soon as it arrives lets the parser
+// drop a stray SOF from line noise at once instead of waiting for a long payload that will never come.
+inline bool lengthAllowed(Type type, size_t len) {
+  switch (type) {
+    case Type::Hello:
+      return len == HELLO_LEN;
+    case Type::State:
+      return len == PAGE_STATE_LEN;
+    case Type::Ack:
+      return len == 2;
+    case Type::Sleep:
+      return len == 0;
+    case Type::Key:
+      return len <= 8;
+    case Type::Book:
+      return len >= 1 && len <= MAX_PAYLOAD;
+  }
+  return false;
+}
 
 // Left shows page N, right shows page N + 1; the roles also fix which pogo pad each unit sends on.
 enum class Role : uint8_t { Left = 0, Right = 1 };
@@ -55,12 +79,22 @@ inline size_t encode(Type type, const uint8_t* payload, size_t len, uint8_t* out
 }
 
 // Byte-at-a-time parser; push() returns true when a CRC-valid frame is available from frame().
+// A false start (a stray SOF byte in line noise) must not swallow the real frame behind it, so when a candidate frame
+// fails, its bytes after the SOF are fed through the parser again.
 class Parser {
  public:
   bool push(uint8_t c) {
+    if (state == Step::Sof) {
+      if (c == SOF) {
+        raw[0] = c;
+        rawLen = 1;
+        state = Step::Type;
+      }
+      return false;
+    }
+    raw[rawLen++] = c;
     switch (state) {
       case Step::Sof:
-        if (c == SOF) state = Step::Type;
         return false;
       case Step::Type:
         f.type = static_cast<Type>(c);
@@ -68,11 +102,9 @@ class Parser {
         state = Step::Len;
         return false;
       case Step::Len:
-        // A bad length may itself be the SOF of the next frame, so it is reprocessed.
-        if (c > MAX_PAYLOAD) {
+        if (c > MAX_PAYLOAD || !lengthAllowed(f.type, c)) {
           errors++;
-          state = Step::Sof;
-          return push(c);
+          return resync();
         }
         f.len = c;
         crc = crc16(&c, 1, crc);
@@ -89,21 +121,42 @@ class Parser {
         state = Step::CrcHi;
         return false;
       case Step::CrcHi: {
-        state = Step::Sof;
         const uint16_t rx = static_cast<uint16_t>(crcLo | (static_cast<uint16_t>(c) << 8));
-        if (rx == crc) return true;
+        if (rx == crc) {
+          state = Step::Sof;
+          return true;
+        }
         errors++;
-        return false;
+        return resync();
       }
     }
     return false;
   }
   const Frame& frame() const { return f; }
   uint32_t crcErrors() const { return errors; }
-  void reset() { state = Step::Sof; }
+  void reset() {
+    state = Step::Sof;
+    rawLen = 0;
+  }
 
  private:
   enum class Step : uint8_t { Sof, Type, Len, Payload, CrcLo, CrcHi };
+
+  // Drops the candidate's SOF and feeds the rest back in, which finds a frame that began inside it.
+  bool resync() {
+    uint8_t again[MAX_PAYLOAD + FRAME_OVERHEAD];
+    const size_t n = rawLen - 1;
+    memcpy(again, raw + 1, n);
+    state = Step::Sof;
+    rawLen = 0;
+    for (size_t i = 0; i < n; i++) {
+      if (push(again[i])) return true;
+    }
+    return false;
+  }
+
+  uint8_t raw[MAX_PAYLOAD + FRAME_OVERHEAD] = {};
+  size_t rawLen = 0;
   Step state = Step::Sof;
   Frame f;
   uint16_t crc = 0;
@@ -141,8 +194,6 @@ struct Hello {
   bool linked = false;      // the sender has heard a compatible Hello and considers the link up
 };
 
-constexpr size_t HELLO_LEN = 11;
-
 inline size_t encodeHello(const Hello& h, uint8_t* out) {
   uint8_t p[HELLO_LEN];
   p[0] = static_cast<uint8_t>(h.role);
@@ -168,8 +219,6 @@ struct PageState {
   uint16_t spine = 0;  // chapter index
   uint16_t page = 0;   // page shown by the left unit; the right unit shows page + 1
 };
-
-constexpr size_t PAGE_STATE_LEN = 6;
 
 inline size_t encodePageState(const PageState& s, uint8_t* out) {
   uint8_t p[PAGE_STATE_LEN];

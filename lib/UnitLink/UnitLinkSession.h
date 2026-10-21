@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 #include "UnitLinkProtocol.h"
 
@@ -61,6 +62,12 @@ class Session {
   // Right unit: true once for each new position from the left unit.
   bool takeRemote(PageState& out);
 
+  // Left unit: the path of the open book ("" when none). While the right unit reports a different book the path is sent
+  // again with every heartbeat, so it can open the same file; a path that does not fit in a frame is not sent.
+  void setBookPath(const std::string& path);
+  // Right unit: true once per Book frame received (they repeat until the right unit has the book open).
+  bool takeBookRequest(std::string& path);
+
   // Either unit: ask the peer to sleep too. takeSleepRequest() is true once on the receiving side.
   void sendSleep();
   bool takeSleepRequest();
@@ -91,6 +98,10 @@ class Session {
   bool haveRemote = false;
   bool remoteDelivered = true;
   bool sleepRequested = false;
+
+  std::string bookPath;       // left side: the open book
+  std::string requestedPath;  // right side: the newest path received
+  bool bookRequested = false;
 };
 
 }  // namespace unitlink

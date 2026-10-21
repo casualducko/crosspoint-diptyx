@@ -66,7 +66,7 @@ TEST(UnitLinkProtocolTest, PayloadLimit) {
   EXPECT_EQ(encode(Type::State, big, sizeof(big), buf), 0u);
   Parser p;
   std::vector<Frame> fr;
-  const size_t n = encode(Type::State, big, MAX_PAYLOAD, buf);
+  const size_t n = encode(Type::Book, big, MAX_PAYLOAD, buf);  // Book is the one message with a variable size
   EXPECT_EQ(n, MAX_PAYLOAD + FRAME_OVERHEAD);
   EXPECT_EQ(feed(p, buf, n, fr), 1);
 }
@@ -146,7 +146,7 @@ TEST(UnitLinkProtocolTest, IncompatibleReasons) {
   r.layoutHash = 7;
   EXPECT_EQ(incompatibleReasons(l, r), INCOMPATIBLE_LAYOUT);
   r.bookId = 8;
-  r.version = 2;
+  r.version = PROTOCOL_VERSION + 1;
   EXPECT_EQ(incompatibleReasons(l, r), INCOMPATIBLE_LAYOUT | INCOMPATIBLE_BOOK | INCOMPATIBLE_VERSION);
   r = l;
   EXPECT_EQ(incompatibleReasons(l, r), INCOMPATIBLE_ROLE);
@@ -158,4 +158,20 @@ TEST(UnitLinkProtocolTest, Fnv1aMatchesKnownValuesAndChains) {
   EXPECT_EQ(fnv1a("foobar", 6), 0xBF9CF968u);
   // Feeding the pieces in turn gives the same result as hashing the whole.
   EXPECT_EQ(fnv1a("bar", 3, fnv1a("foo", 3)), fnv1a("foobar", 6));
+}
+
+TEST(UnitLinkProtocolTest, FalseStartWithLongLengthDoesNotSwallowTheNextFrame) {
+  Hello h;
+  uint8_t good[MAX_PAYLOAD + FRAME_OVERHEAD];
+  const size_t n = encodeHello(h, good);
+  Parser p;
+  // SOF, a type, a length of 150: the parser now waits for 150 payload bytes unless it can replay them.
+  const uint8_t junk[] = {SOF, 1, 150};
+  for (uint8_t c : junk) EXPECT_FALSE(p.push(c));
+  bool got = false;
+  for (size_t i = 0; i < n; i++) got = p.push(good[i]) || got;
+  // The real frame is shorter than the claimed payload, so only a replaying parser can have found it by the time it
+  // is complete plus the missing bytes arrive.
+  for (int i = 0; i < 200 && !got; i++) got = p.push(0);
+  EXPECT_TRUE(got);
 }

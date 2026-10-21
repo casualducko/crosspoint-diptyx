@@ -8,6 +8,8 @@
 
 #include "CrossPointSettings.h"
 #include "SilentRestart.h"
+#include "activities/Activity.h"
+#include "activities/ActivityManager.h"
 
 UnitLinkService& UnitLinkService::get() {
   static UnitLinkService instance;
@@ -64,6 +66,7 @@ bool UnitLinkService::start(unitlink::Role role, const GfxRenderer& renderer) {
 void UnitLinkService::setBook(const std::string& epubPath, const GfxRenderer& renderer) {
   if (!running()) return;
   currentBookId = bookIdFor(epubPath);
+  session.setBookPath(epubPath);
   session.setIdentity(currentBookId, layoutHashFor(renderer), millis());
 }
 
@@ -72,7 +75,27 @@ void UnitLinkService::refreshLayout(const GfxRenderer& renderer) {
 }
 
 void UnitLinkService::tick() {
-  if (running() && !ending) session.update(millis());
+  if (!running() || ending) return;
+  session.update(millis());
+  std::string path;
+  if (session.takeBookRequest(path)) openRequestedBook(path);
+}
+
+// The left unit has a book open that this unit does not: open the same file (the books are copied to both SD cards).
+// The request repeats until this unit's Hello shows the book, so one try per path every few seconds is enough, and a
+// missing file is not retried in a loop.
+void UnitLinkService::openRequestedBook(const std::string& path) {
+  constexpr unsigned long RETRY_MS = 8000;
+  if (path == lastRequestedPath && millis() - lastRequestMs < RETRY_MS) return;
+  lastRequestedPath = path;
+  lastRequestMs = millis();
+  if (bookIdFor(path) == currentBookId) return;
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("LINK", "Left unit's book is not on this SD card: %s", path.c_str());
+    return;
+  }
+  LOG_INF("LINK", "Opening the left unit's book: %s", path.c_str());
+  activityManager.goToReader(path);
 }
 
 void UnitLinkService::endAndRestart() {

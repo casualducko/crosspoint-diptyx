@@ -41,7 +41,11 @@ class UnitLinkService {
   UnitLinkService() : session(link) {}
 
   HalLink link;
+  void openRequestedBook(const std::string& path);
+
   uint32_t currentBookId = 0;
+  std::string lastRequestedPath;
+  unsigned long lastRequestMs = 0;
   unitlink::Session session;
   bool ending = false;
 };

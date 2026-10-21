@@ -280,3 +280,31 @@ TEST(UnitLinkSessionTest, PositionIsSentAgainAfterTheBookChanged) {
   EXPECT_EQ(s.spine, 3);
   EXPECT_EQ(s.page, 40);
 }
+
+TEST(UnitLinkSessionTest, RightUnitIsToldWhichBookTheLeftUnitHasOpen) {
+  Rig r;
+  r.left.start(r.cfg(Role::Left, 5), r.now);
+  r.right.start(r.cfg(Role::Right, 0), r.now);
+  r.left.setBookPath("/Books/Dune.epub");
+  r.run(1500);
+  EXPECT_EQ(r.right.status(), Status::Incompatible);
+  std::string path;
+  ASSERT_TRUE(r.right.takeBookRequest(path));
+  EXPECT_EQ(path, "/Books/Dune.epub");
+  r.right.setIdentity(5, 9, r.now);
+  r.run(1500);
+  EXPECT_TRUE(r.right.isLinked());
+  EXPECT_FALSE(r.right.takeBookRequest(path));  // nothing more is sent once the books match
+}
+
+TEST(UnitLinkSessionTest, NoBookIsSentWithoutAPathOrToTheLeftUnit) {
+  Rig r;
+  r.left.start(r.cfg(Role::Left, 5), r.now);
+  r.right.start(r.cfg(Role::Right, 0), r.now);
+  r.run(1500);
+  std::string path;
+  EXPECT_FALSE(r.right.takeBookRequest(path));
+  r.right.setBookPath("/Books/Other.epub");
+  r.run(1500);
+  EXPECT_FALSE(r.left.takeBookRequest(path));
+}
