@@ -1,5 +1,7 @@
 #include "UnitLinkSession.h"
 
+#include <algorithm>
+
 namespace unitlink {
 
 namespace {
@@ -19,6 +21,10 @@ void Session::start(const Config& config, uint32_t nowMs) {
   remoteDelivered = true;
   sleepRequested = false;
   bookRequested = false;
+  marksPending = false;
+  marksIn.clear();
+  marksReady = false;
+  haveApplied = false;
   sendHello(nowMs);
 }
 
@@ -29,6 +35,8 @@ void Session::setIdentity(uint32_t bookId, uint32_t layoutHash, uint32_t nowMs) 
   currentStatus = Status::Pairing;
   reasons = 0;
   lastRx = nowMs;
+  marksIn.clear();
+  haveApplied = false;
   sendHello(nowMs);
 }
 
@@ -82,6 +90,77 @@ void Session::update(uint32_t nowMs) {
   }
 
   if (haveSent && !acked && canSendState() && nowMs - lastStateTx >= RESEND_MS) sendPageState(nowMs);
+
+  if (marksPending && currentStatus == Status::Linked) {
+    const bool sentAll = marksCursor >= marksOut.size();
+    if (nowMs - lastMarksTx >= (sentAll ? MARKS_RESEND_MS : MARKS_CHUNK_MS)) sendMarksChunk(nowMs);
+  }
+}
+
+void Session::sendMarksChunk(uint32_t nowMs) {
+  if (marksCursor >= marksOut.size()) marksCursor = 0;  // nobody confirmed the whole file: start over
+  const size_t n = std::min(MARKS_CHUNK_DATA, marksOut.size() - marksCursor);
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  sendBytes(buf,
+            encodeMarksChunk(marksOutCrc, static_cast<uint16_t>(marksCursor), static_cast<uint16_t>(marksOut.size()),
+                             reinterpret_cast<const uint8_t*>(marksOut.data()) + marksCursor, n, buf));
+  marksCursor += n;
+  lastMarksTx = nowMs;
+}
+
+bool Session::publishMarks(const std::string& data, uint32_t nowMs) {
+  if (data.empty() || data.size() > MARKS_MAX_TOTAL) return false;
+  marksOut = data;
+  marksOutCrc = crc16(reinterpret_cast<const uint8_t*>(data.data()), data.size());
+  marksCursor = 0;
+  marksPending = true;
+  lastMarksTx = nowMs - MARKS_CHUNK_MS;  // the first chunk goes out on the next update
+  return true;
+}
+
+void Session::handleMarks(const Frame& f, uint32_t nowMs) {
+  if (cfg.role != Role::Right || f.len <= MARKS_HEADER_LEN) return;
+  lastRx = nowMs;
+  const uint16_t crc = get16(f.payload);
+  const uint16_t offset = get16(f.payload + 2);
+  const uint16_t total = get16(f.payload + 4);
+  const size_t n = f.len - MARKS_HEADER_LEN;
+  if (total == 0 || total > MARKS_MAX_TOTAL || offset + n > total) return;
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  // The same file again: the earlier confirmation may have been lost.
+  if (haveApplied && crc == appliedCrc) {
+    if (offset + n == total) sendBytes(buf, encodeAck(crc, buf, Type::MarksAck));
+    return;
+  }
+  const char* data = reinterpret_cast<const char*>(f.payload) + MARKS_HEADER_LEN;
+  if (offset == 0) {
+    marksIn.assign(data, n);
+    marksInCrc = crc;
+    marksInTotal = total;
+  } else if (crc == marksInCrc && total == marksInTotal && offset == marksIn.size()) {
+    marksIn.append(data, n);
+  } else {
+    return;  // a chunk was missed: wait for the file to come round again
+  }
+  if (marksIn.size() < marksInTotal) return;
+  if (crc16(reinterpret_cast<const uint8_t*>(marksIn.data()), marksIn.size()) != marksInCrc) {
+    marksIn.clear();
+    return;
+  }
+  marksDone = std::move(marksIn);
+  marksIn.clear();
+  marksReady = true;
+  haveApplied = true;
+  appliedCrc = crc;
+  sendBytes(buf, encodeAck(crc, buf, Type::MarksAck));
+}
+
+bool Session::takeMarks(std::string& out) {
+  if (!marksReady) return false;
+  marksReady = false;
+  out = std::move(marksDone);
+  marksDone.clear();
+  return true;
 }
 
 void Session::handleFrame(const Frame& f, uint32_t nowMs) {
@@ -102,6 +181,7 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
         currentStatus = Status::Incompatible;
         return;
       }
+      if (!peer.linked) peerFresh++;
       const bool wasLinked = currentStatus == Status::Linked;
       currentStatus = Status::Linked;
       // Answer at once so the peer links without waiting for its next heartbeat.
@@ -143,6 +223,16 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
       requestedPath.assign(reinterpret_cast<const char*>(f.payload), f.len);
       bookRequested = true;
       return;
+    case Type::Marks:
+      handleMarks(f, nowMs);
+      return;
+    case Type::MarksAck: {
+      uint16_t crc;
+      if (!decodeAck(f, crc, Type::MarksAck)) return;
+      lastRx = nowMs;
+      if (marksPending && crc == marksOutCrc) marksPending = false;
+      return;
+    }
     case Type::Key:
       return;
   }

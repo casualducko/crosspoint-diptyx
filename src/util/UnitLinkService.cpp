@@ -11,6 +11,7 @@
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "util/BookmarkUtil.h"
 
 UnitLinkService& UnitLinkService::get() {
   static UnitLinkService instance;
@@ -91,6 +92,8 @@ bool UnitLinkService::takePeerSleep() {
 void UnitLinkService::setBook(const std::string& epubPath, const GfxRenderer& renderer) {
   if (!running()) return;
   currentBookId = bookIdFor(epubPath);
+  currentBookPath = epubPath;
+  marksDirty = !epubPath.empty();  // a newly paired right unit gets the left unit's bookmarks
   session.setBookPath(epubPath);
   session.setIdentity(currentBookId, layoutHashFor(renderer), millis());
 }
@@ -113,6 +116,59 @@ void UnitLinkService::tick() {
   }
   std::string path;
   if (session.takeBookRequest(path)) openRequestedBook(path);
+
+  if (session.role() == unitlink::Role::Left) {
+    // A right unit that has just started has none of the bookmarks, whatever it was sent before.
+    if (session.peerFreshCount() != lastPeerFresh) {
+      lastPeerFresh = session.peerFreshCount();
+      marksDirty = true;
+    }
+    if (marksDirty && status == unitlink::Status::Linked && !currentBookPath.empty()) {
+      marksDirty = false;
+      sendBookmarks();
+    }
+  } else if (std::string json; session.takeMarks(json)) {
+    applyBookmarks(json);
+  }
+}
+
+void UnitLinkService::bookmarksSaved(const std::string& epubPath) {
+  if (running() && session.role() == unitlink::Role::Left && epubPath == currentBookPath) marksDirty = true;
+}
+
+bool UnitLinkService::takeBookmarksUpdated() {
+  const bool updated = marksUpdated;
+  marksUpdated = false;
+  return updated;
+}
+
+// The right unit gets the file as it is on this card; with no file yet it gets an empty list, so bookmarks removed here
+// disappear there too.
+void UnitLinkService::sendBookmarks() {
+  static constexpr char EMPTY_LIST[] = "{\"bookmarks\":[]}";
+  std::string json;
+  if (!Storage.readFileToString("LINK", BookmarkUtil::getBookmarkPath(currentBookPath), unitlink::MARKS_MAX_TOTAL,
+                                json)) {
+    json = EMPTY_LIST;
+  }
+  if (!session.publishMarks(json, millis()))
+    LOG_ERR("LINK", "Bookmark file not sent (%u bytes)", (unsigned)json.size());
+}
+
+// Written through a temporary file so a cut cable or a power loss cannot leave half a list behind.
+void UnitLinkService::applyBookmarks(const std::string& json) {
+  if (currentBookPath.empty()) return;
+  const std::string path = BookmarkUtil::getBookmarkPath(currentBookPath);
+  std::string current;
+  if (Storage.readFileToString("LINK", path, unitlink::MARKS_MAX_TOTAL, current) && current == json) return;
+  Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
+  const std::string tmp = path + ".tmp";
+  if (!Storage.writeFile(tmp.c_str(), String(json.c_str())) || !Storage.replaceFile(tmp.c_str(), path.c_str())) {
+    LOG_ERR("LINK", "Could not store the left unit's bookmarks");
+    return;
+  }
+  LOG_INF("LINK", "Bookmarks copied from the left unit (%u bytes)", (unsigned)json.size());
+  marksUpdated = true;
 }
 
 // The left unit has a book open that this unit does not: open the same file (the books are copied to both SD cards).

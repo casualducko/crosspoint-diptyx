@@ -348,3 +348,98 @@ TEST(UnitLinkSessionTest, PositionPublishedBeforeTheLinkIsUpIsSentWhenItComesUp)
   ASSERT_TRUE(r.right.takeRemote(s));
   EXPECT_EQ(s.page, 30);
 }
+
+namespace {
+std::string makeMarks(size_t n) {
+  std::string s;
+  for (size_t i = 0; i < n; i++) s.push_back(static_cast<char>('a' + (i * 7) % 26));
+  return s;
+}
+}  // namespace
+
+TEST(UnitLinkSessionTest, BookmarkFileArrivesWholeInSeveralChunks) {
+  Rig r;
+  r.startBoth();
+  r.run(1500);
+  const std::string file = makeMarks(1000);  // five chunks
+  ASSERT_TRUE(r.left.publishMarks(file, r.now));
+  r.run(500);
+  std::string got;
+  ASSERT_TRUE(r.right.takeMarks(got));
+  EXPECT_EQ(got, file);
+  EXPECT_FALSE(r.right.takeMarks(got));
+  EXPECT_TRUE(r.left.marksDelivered());
+}
+
+TEST(UnitLinkSessionTest, BookmarkFileIsHandedOverOnlyOnceAndStopsRepeatingAfterTheAck) {
+  Rig r;
+  r.startBoth();
+  r.run(1500);
+  ASSERT_TRUE(r.left.publishMarks(makeMarks(300), r.now));
+  r.run(300);
+  std::string got;
+  ASSERT_TRUE(r.right.takeMarks(got));
+  r.run(6000);  // no repeats: the left unit has its ack
+  EXPECT_FALSE(r.right.takeMarks(got));
+}
+
+TEST(UnitLinkSessionTest, BookmarkFileSurvivesLostFrames) {
+  Rig r;
+  r.l2r.lossPercent = 30;
+  r.r2l.lossPercent = 30;
+  r.startBoth();
+  r.run(8000);
+  ASSERT_TRUE(r.left.isLinked());
+  const std::string file = makeMarks(900);
+  ASSERT_TRUE(r.left.publishMarks(file, r.now));
+  r.run(60000);
+  std::string got;
+  ASSERT_TRUE(r.right.takeMarks(got));
+  EXPECT_EQ(got, file);
+  EXPECT_TRUE(r.left.marksDelivered());
+}
+
+TEST(UnitLinkSessionTest, NewerBookmarkFileReplacesOneOnItsWay) {
+  Rig r;
+  r.startBoth();
+  r.run(1500);
+  ASSERT_TRUE(r.left.publishMarks(makeMarks(800), r.now));
+  r.run(50);  // part of it has gone out
+  const std::string second = makeMarks(500) + "x";
+  ASSERT_TRUE(r.left.publishMarks(second, r.now));
+  r.run(1000);
+  std::string got;
+  ASSERT_TRUE(r.right.takeMarks(got));
+  EXPECT_EQ(got, second);
+}
+
+TEST(UnitLinkSessionTest, EmptyOrOversizedBookmarkFilesAreRefusedAndTheRightUnitCannotSend) {
+  Rig r;
+  r.startBoth();
+  EXPECT_FALSE(r.left.publishMarks("", r.now));
+  EXPECT_FALSE(r.left.publishMarks(std::string(MARKS_MAX_TOTAL + 1, 'x'), r.now));
+  r.run(1500);
+  // A file from the right unit's side is ignored by the left unit.
+  ASSERT_TRUE(r.right.publishMarks("{}", r.now));
+  r.run(500);
+  std::string got;
+  EXPECT_FALSE(r.left.takeMarks(got));
+}
+
+TEST(UnitLinkSessionTest, RestartedRightUnitCountsAsFreshAndGetsTheFileAgain) {
+  Rig r;
+  r.startBoth();
+  r.run(1500);
+  const uint32_t before = r.left.peerFreshCount();
+  ASSERT_TRUE(r.left.publishMarks(makeMarks(250), r.now));
+  r.run(500);
+  std::string got;
+  ASSERT_TRUE(r.right.takeMarks(got));
+  r.right.start(r.cfg(Role::Right), r.now);  // the right unit restarts
+  r.run(1500);
+  EXPECT_TRUE(r.left.peerFreshCount() > before);
+  // The service would now publish again; the restarted unit has no memory of the file.
+  ASSERT_TRUE(r.left.publishMarks(makeMarks(250), r.now));
+  r.run(500);
+  EXPECT_TRUE(r.right.takeMarks(got));
+}

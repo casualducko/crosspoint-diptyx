@@ -39,6 +39,8 @@ class Session {
   static constexpr uint32_t HELLO_LINKED_MS = 1000;
   static constexpr uint32_t LOST_AFTER_MS = 3500;
   static constexpr uint32_t RESEND_MS = 400;
+  static constexpr uint32_t MARKS_CHUNK_MS = 25;     // one 200-byte frame takes 17 ms on the wire
+  static constexpr uint32_t MARKS_RESEND_MS = 2000;  // the whole file goes out again if nobody confirmed it
 
   explicit Session(Port& portRef) : port(portRef) {}
 
@@ -75,6 +77,16 @@ class Session {
   // True once per Book frame received (they repeat until this unit has the book open).
   bool takeBookRequest(std::string& path);
 
+  // Left unit: send the bookmark file's content to the right unit, chunk by chunk, until it confirms (at most
+  // MARKS_MAX_TOTAL bytes, never empty; a newer file replaces one still on its way).
+  bool publishMarks(const std::string& data, uint32_t nowMs);
+  bool marksDelivered() const { return !marksPending; }
+  // Right unit: true once for each complete, CRC-checked file from the left unit.
+  bool takeMarks(std::string& out);
+  // Counts the peers' Hello frames that say it has just started or restarted; a change means "send it everything
+  // again".
+  uint32_t peerFreshCount() const { return peerFresh; }
+
   // Either unit: ask the peer to sleep too. takeSleepRequest() is true once on the receiving side.
   void sendSleep();
   bool takeSleepRequest();
@@ -85,6 +97,8 @@ class Session {
   void sendBytes(const uint8_t* data, size_t len);
   void sendPageState(uint32_t nowMs);
   bool canSendState() const;
+  void sendMarksChunk(uint32_t nowMs);
+  void handleMarks(const Frame& f, uint32_t nowMs);
 
   Port& port;
   Parser parser;
@@ -111,6 +125,23 @@ class Session {
   std::string requestedPath;  // the newest path received
   uint32_t peerBookId = 0;
   bool bookRequested = false;
+  uint32_t peerFresh = 0;
+
+  // Left side: the bookmark file being sent.
+  std::string marksOut;
+  uint16_t marksOutCrc = 0;
+  size_t marksCursor = 0;
+  bool marksPending = false;
+  uint32_t lastMarksTx = 0;
+
+  // Right side: the file being assembled, the newest complete one, and the crc of the one handed over last.
+  std::string marksIn;
+  uint16_t marksInCrc = 0;
+  uint16_t marksInTotal = 0;
+  std::string marksDone;
+  bool marksReady = false;
+  bool haveApplied = false;
+  uint16_t appliedCrc = 0;
 };
 
 }  // namespace unitlink

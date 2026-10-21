@@ -29,6 +29,10 @@ class UnitLinkService {
   bool takePeerSleep();
   // The reader opened `epubPath`, or closed its book (empty path). The text layout is taken from the current settings.
   void setBook(const std::string& epubPath, const GfxRenderer& renderer);
+  // Left unit: the bookmark file of `epubPath` was just written; the right unit gets a copy.
+  void bookmarksSaved(const std::string& epubPath);
+  // Right unit: true once after the left unit's bookmark file replaced this unit's.
+  bool takeBookmarksUpdated();
   // The text settings may have changed: announce the layout again if its hash moved.
   void refreshLayout(const GfxRenderer& renderer);
   // What to tell the user about the link right now (STR_LINK_LINKED when all is well).
@@ -52,6 +56,13 @@ class UnitLinkService {
 
   HalLink link;
   void openRequestedBook(const std::string& path);
+  void sendBookmarks();
+  void applyBookmarks(const std::string& json);
+
+  std::string currentBookPath;
+  uint32_t lastPeerFresh = 0;
+  bool marksDirty = false;
+  bool marksUpdated = false;
 
   uint32_t currentBookId = 0;
   std::string lastRequestedPath;

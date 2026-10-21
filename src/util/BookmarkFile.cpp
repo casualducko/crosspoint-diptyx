@@ -6,6 +6,7 @@
 #include <PersistableStore.h>
 
 #include "BookmarkUtil.h"
+#include "UnitLinkService.h"
 
 bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>& bookmarks) {
   bookmarks.clear();
@@ -73,5 +74,7 @@ bool BookmarkFile::save(const std::string& bookPath, const std::vector<BookmarkE
   // writeDocToFile ensures /.crosspoint; the bookmarks subdirectory is ours.
   Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
   const std::string path = BookmarkUtil::getBookmarkPath(bookPath);
-  return PersistableStoreBase::writeDocToFile(path.c_str(), doc);
+  const bool saved = PersistableStoreBase::writeDocToFile(path.c_str(), doc);
+  if (saved) UnitLinkService::get().bookmarksSaved(bookPath);
+  return saved;
 }

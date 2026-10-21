@@ -175,3 +175,21 @@ TEST(UnitLinkProtocolTest, FalseStartWithLongLengthDoesNotSwallowTheNextFrame) {
   for (int i = 0; i < 200 && !got; i++) got = p.push(0);
   EXPECT_TRUE(got);
 }
+
+TEST(UnitLinkProtocolTest, MarksChunkRoundTripsAndLimitsItsData) {
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  const uint8_t data[MARKS_CHUNK_DATA] = {1, 2, 3};
+  Parser p;
+  std::vector<Frame> fr;
+  const size_t n = encodeMarksChunk(0xBEEF, 190, 1000, data, MARKS_CHUNK_DATA, buf);
+  ASSERT_EQ(n, MAX_PAYLOAD + FRAME_OVERHEAD);
+  ASSERT_EQ(feed(p, buf, n, fr), 1);
+  EXPECT_EQ(fr.back().type, Type::Marks);
+  EXPECT_EQ(get16(fr.back().payload), 0xBEEF);
+  EXPECT_EQ(get16(fr.back().payload + 2), 190);
+  EXPECT_EQ(get16(fr.back().payload + 4), 1000);
+  EXPECT_EQ(encodeMarksChunk(1, 0, 1, data, MARKS_CHUNK_DATA + 1, buf), 0u);
+  // The bare header, with no data, is not a chunk.
+  EXPECT_FALSE(lengthAllowed(Type::Marks, MARKS_HEADER_LEN));
+  EXPECT_TRUE(lengthAllowed(Type::MarksAck, 2));
+}

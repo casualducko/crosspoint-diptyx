@@ -12,7 +12,7 @@ namespace unitlink {
 constexpr uint8_t SOF = 0xA5;
 constexpr size_t MAX_PAYLOAD = 200;  // room for a book path
 constexpr size_t FRAME_OVERHEAD = 5;
-constexpr uint8_t PROTOCOL_VERSION = 2;
+constexpr uint8_t PROTOCOL_VERSION = 3;
 
 enum class Type : uint8_t {
   Hello = 1,  // pairing and heartbeat: role, version, book id, layout hash, whether the sender considers itself linked
@@ -21,10 +21,15 @@ enum class Type : uint8_t {
   Sleep = 4,  // both units go to sleep
   Ack = 5,    // echoes the seq of a State
   Book = 6,   // left -> right: path of the open book, repeated while the right unit has another one open
+  Marks = 7,  // left -> right: one chunk of the book's bookmark file (see MarksChunk)
+  MarksAck = 8,  // right -> left: the crc of a bookmark file received whole
 };
 
 constexpr size_t HELLO_LEN = 11;
 constexpr size_t PAGE_STATE_LEN = 6;
+constexpr size_t MARKS_HEADER_LEN = 6;  // crc of the whole file, offset of this chunk, size of the whole file
+constexpr size_t MARKS_CHUNK_DATA = MAX_PAYLOAD - MARKS_HEADER_LEN;
+constexpr size_t MARKS_MAX_TOTAL = 16384;
 
 // Every message has a fixed payload size except Book (a path). Checking the size as soon as it arrives lets the parser
 // drop a stray SOF from line noise at once instead of waiting for a long payload that will never come.
@@ -42,6 +47,10 @@ inline bool lengthAllowed(Type type, size_t len) {
       return len <= 8;
     case Type::Book:
       return len >= 1 && len <= MAX_PAYLOAD;
+    case Type::Marks:
+      return len > MARKS_HEADER_LEN && len <= MAX_PAYLOAD;
+    case Type::MarksAck:
+      return len == 2;
   }
   return false;
 }
@@ -236,16 +245,30 @@ inline bool decodePageState(const Frame& f, PageState& s) {
   return true;
 }
 
-inline size_t encodeAck(uint16_t seq, uint8_t* out) {
+// Ack (a State's seq) and MarksAck (a file's crc) share one shape: a 16-bit number.
+inline size_t encodeAck(uint16_t seq, uint8_t* out, Type type = Type::Ack) {
   uint8_t p[2];
   put16(p, seq);
-  return encode(Type::Ack, p, sizeof(p), out);
+  return encode(type, p, sizeof(p), out);
 }
 
-inline bool decodeAck(const Frame& f, uint16_t& seq) {
-  if (f.type != Type::Ack || f.len != 2) return false;
+inline bool decodeAck(const Frame& f, uint16_t& seq, Type type = Type::Ack) {
+  if (f.type != type || f.len != 2) return false;
   seq = get16(f.payload);
   return true;
+}
+
+// A chunk of the file: [crc16 of the whole file][offset u16][total size u16][data]. The crc names the file, so the
+// receiver can tell a repeat from news and check the file once it is whole.
+inline size_t encodeMarksChunk(uint16_t fileCrc, uint16_t offset, uint16_t total, const uint8_t* data, size_t n,
+                               uint8_t* out) {
+  uint8_t p[MAX_PAYLOAD];
+  if (n > MARKS_CHUNK_DATA) return 0;
+  put16(p, fileCrc);
+  put16(p + 2, offset);
+  put16(p + 4, total);
+  memcpy(p + MARKS_HEADER_LEN, data, n);
+  return encode(Type::Marks, p, MARKS_HEADER_LEN + n, out);
 }
 
 // Why two units cannot pair; a bit mask so the screen can name every cause.

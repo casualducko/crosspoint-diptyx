@@ -2358,6 +2358,14 @@ void EpubReaderActivity::serviceLink() {
   // A status popup is drawn over the page while the link is not up, so a change means the page must be drawn again.
   if (link.statusKey() != shownLinkKey) requestUpdate();
   auto& session = link.linkSession();
+  if (linkFollower() && link.takeBookmarksUpdated()) {
+    const bool wasBookmarked = currentPageBookmarked;
+    {
+      RenderLock lock;
+      loadCachedBookmarks();
+    }
+    if (currentPageBookmarked != wasBookmarked) requestUpdate();
+  }
   if (linkFollower()) {
     automaticPageTurnActive = false;
     unitlink::PageState remote;
@@ -3403,7 +3411,7 @@ void EpubReaderActivity::loadCachedBookmarks() {
 }
 
 void EpubReaderActivity::addBookmark(const bool deferRender) {
-  if (!section || !epub) return;
+  if (!section || !epub || linkFollower()) return;  // the left unit's bookmarks are copied here
   LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
   int currentPage;
   int pageCount;
