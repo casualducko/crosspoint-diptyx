@@ -151,3 +151,11 @@ TEST(UnitLinkProtocolTest, IncompatibleReasons) {
   r = l;
   EXPECT_EQ(incompatibleReasons(l, r), INCOMPATIBLE_ROLE);
 }
+
+TEST(UnitLinkProtocolTest, Fnv1aMatchesKnownValuesAndChains) {
+  EXPECT_EQ(fnv1a("", 0), 2166136261u);
+  EXPECT_EQ(fnv1a("a", 1), 0xE40C292Cu);
+  EXPECT_EQ(fnv1a("foobar", 6), 0xBF9CF968u);
+  // Feeding the pieces in turn gives the same result as hashing the whole.
+  EXPECT_EQ(fnv1a("bar", 3, fnv1a("foo", 3)), fnv1a("foobar", 6));
+}

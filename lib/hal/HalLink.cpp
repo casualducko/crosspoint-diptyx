@@ -35,7 +35,7 @@ bool HalLink::begin(unitlink::Role role) {
   // Left sends on D+ and listens on D-, right the other way round, so the straight cable joins one TX to the other RX.
   txPin = role == unitlink::Role::Left ? PIN_D_PLUS : PIN_D_MINUS;
   rxPin = role == unitlink::Role::Left ? PIN_D_MINUS : PIN_D_PLUS;
-  Serial.flush();
+  logSerial.flush();
   CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
   // The first Serial1.begin on a USB pin does not take the pin; claiming both as GPIO first does.
   pinMode(rxPin, INPUT_PULLUP);

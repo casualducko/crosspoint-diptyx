@@ -112,6 +112,14 @@ class Parser {
   uint32_t errors = 0;
 };
 
+// FNV-1a, used to fold the book and the layout settings into the 32-bit ids that Hello carries.
+constexpr uint32_t FNV_OFFSET = 2166136261u;
+inline uint32_t fnv1a(const void* data, size_t n, uint32_t h = FNV_OFFSET) {
+  const uint8_t* p = static_cast<const uint8_t*>(data);
+  for (size_t i = 0; i < n; i++) h = (h ^ p[i]) * 16777619u;
+  return h;
+}
+
 inline void put16(uint8_t* p, uint16_t v) {
   p[0] = static_cast<uint8_t>(v & 0xFF);
   p[1] = static_cast<uint8_t>(v >> 8);
