@@ -71,8 +71,8 @@ void Session::update(uint32_t nowMs) {
   if (nowMs - lastHelloTx >= helloEvery) {
     sendHello(nowMs);
     // The right unit has another book (or none) open: tell it which one this unit has.
-    if (cfg.role == Role::Left && currentStatus == Status::Incompatible && (reasons & INCOMPATIBLE_BOOK) &&
-        !bookPath.empty()) {
+    const bool mayOffer = cfg.role == Role::Left || peerBookId == 0;
+    if (mayOffer && currentStatus == Status::Incompatible && (reasons & INCOMPATIBLE_BOOK) && !bookPath.empty()) {
       uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
       sendBytes(buf, encode(Type::Book, reinterpret_cast<const uint8_t*>(bookPath.data()), bookPath.size(), buf));
     }
@@ -93,6 +93,7 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
       self.bookId = cfg.bookId;
       self.layoutHash = cfg.layoutHash;
       reasons = unitlink::incompatibleReasons(self, peer);
+      peerBookId = peer.bookId;
       lastRx = nowMs;
       if (reasons) {
         currentStatus = Status::Incompatible;
@@ -134,7 +135,7 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
       sleepRequested = true;
       return;
     case Type::Book:
-      if (cfg.role != Role::Right || f.len == 0) return;
+      if (f.len == 0) return;
       lastRx = nowMs;
       requestedPath.assign(reinterpret_cast<const char*>(f.payload), f.len);
       bookRequested = true;

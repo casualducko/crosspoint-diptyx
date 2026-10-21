@@ -306,5 +306,45 @@ TEST(UnitLinkSessionTest, NoBookIsSentWithoutAPathOrToTheLeftUnit) {
   EXPECT_FALSE(r.right.takeBookRequest(path));
   r.right.setBookPath("/Books/Other.epub");
   r.run(1500);
+  EXPECT_FALSE(r.left.takeBookRequest(path));  // the right unit does not offer its book to a left unit that has one
+}
+
+TEST(UnitLinkSessionTest, LeftUnitIsToldWhichBookTheRightUnitHasOpen) {
+  Rig r;
+  r.left.start(r.cfg(Role::Left, 0), r.now);
+  r.right.start(r.cfg(Role::Right, 5), r.now);
+  r.right.setBookPath("/Books/Dune.epub");
+  r.run(1500);
+  std::string path;
+  ASSERT_TRUE(r.left.takeBookRequest(path));
+  EXPECT_EQ(path, "/Books/Dune.epub");
+  EXPECT_FALSE(r.right.takeBookRequest(path));
+}
+
+TEST(UnitLinkSessionTest, TwoDifferentBooksSettleOnTheLeftUnitsBook) {
+  Rig r;
+  r.left.start(r.cfg(Role::Left, 4), r.now);
+  r.right.start(r.cfg(Role::Right, 5), r.now);
+  r.left.setBookPath("/Books/A.epub");
+  r.right.setBookPath("/Books/B.epub");
+  r.run(1500);
+  std::string path;
   EXPECT_FALSE(r.left.takeBookRequest(path));
+  ASSERT_TRUE(r.right.takeBookRequest(path));
+  EXPECT_EQ(path, "/Books/A.epub");
+}
+
+TEST(UnitLinkSessionTest, PositionPublishedBeforeTheLinkIsUpIsSentWhenItComesUp) {
+  // The right unit already has book 5 open; the left unit opens it, publishes its page, and only then pairs.
+  Rig r;
+  r.left.start(r.cfg(Role::Left, 0), r.now);
+  r.right.start(r.cfg(Role::Right, 5), r.now);
+  r.run(1000);
+  EXPECT_EQ(r.right.status(), Status::Incompatible);
+  r.left.setIdentity(5, 9, r.now);
+  r.left.publish(2, 30, r.now);
+  r.run(1500);
+  PageState s;
+  ASSERT_TRUE(r.right.takeRemote(s));
+  EXPECT_EQ(s.page, 30);
 }
