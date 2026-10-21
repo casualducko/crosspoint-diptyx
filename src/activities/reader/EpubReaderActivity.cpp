@@ -1775,6 +1775,12 @@ void EpubReaderActivity::renderBook() {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
 
+  if (auto& link = UnitLinkService::get(); link.running()) {
+    shownLinkKey = link.statusKey();
+    if (link.linkSession().status() != unitlink::Status::Linked)
+      GUI.drawPopup(renderer, I18N.get(link.statusMessage()));
+  }
+
   // Toolbar menu: overlay the toolbar / panel on top of the freshly rendered page.
   if (overlay != Overlay::None && usesToolbarMenu()) {
     // The page just re-rendered under the overlay: refresh the snapshot that
@@ -2349,6 +2355,8 @@ void EpubReaderActivity::serviceLink() {
     linkLayoutCheckMs = millis();
     link.refreshLayout(renderer);
   }
+  // A status popup is drawn over the page while the link is not up, so a change means the page must be drawn again.
+  if (link.statusKey() != shownLinkKey) requestUpdate();
   auto& session = link.linkSession();
   if (linkFollower()) {
     automaticPageTurnActive = false;

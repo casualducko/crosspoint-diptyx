@@ -82,3 +82,23 @@ void UnitLinkService::endAndRestart() {
   link.end();
   silentRestartToSettings();
 }
+
+StrId UnitLinkService::statusMessage() const {
+  switch (session.status()) {
+    case unitlink::Status::Linked:
+      return StrId::STR_LINK_LINKED;
+    case unitlink::Status::Lost:
+      return StrId::STR_LINK_LOST;
+    case unitlink::Status::Incompatible: {
+      const uint8_t reasons = session.incompatibleReasons();
+      if (reasons & unitlink::INCOMPATIBLE_ROLE) return StrId::STR_LINK_SAME_SIDE;
+      if (reasons & unitlink::INCOMPATIBLE_VERSION) return StrId::STR_LINK_DIFFERENT_VERSION;
+      if (reasons & unitlink::INCOMPATIBLE_BOOK) return StrId::STR_LINK_DIFFERENT_BOOK;
+      return StrId::STR_LINK_DIFFERENT_LAYOUT;
+    }
+    case unitlink::Status::Idle:
+    case unitlink::Status::Pairing:
+      break;
+  }
+  return StrId::STR_LINK_PAIRING;
+}

@@ -115,31 +115,7 @@ void LinkActivity::render(RenderLock&&) {
   shownPage = testPage;
   shownAcked = session->publishedIsAcked();
 
-  const char* statusText = tr(STR_LINK_PAIRING);
-  switch (shownStatus) {
-    case unitlink::Status::Linked:
-      statusText = tr(STR_LINK_LINKED);
-      break;
-    case unitlink::Status::Lost:
-      statusText = tr(STR_LINK_LOST);
-      break;
-    case unitlink::Status::Incompatible: {
-      const uint8_t reasons = session->incompatibleReasons();
-      if (reasons & unitlink::INCOMPATIBLE_ROLE) {
-        statusText = tr(STR_LINK_SAME_SIDE);
-      } else if (reasons & unitlink::INCOMPATIBLE_VERSION) {
-        statusText = tr(STR_LINK_DIFFERENT_VERSION);
-      } else if (reasons & unitlink::INCOMPATIBLE_BOOK) {
-        statusText = tr(STR_LINK_DIFFERENT_BOOK);
-      } else {
-        statusText = tr(STR_LINK_DIFFERENT_LAYOUT);
-      }
-      break;
-    }
-    case unitlink::Status::Idle:
-    case unitlink::Status::Pairing:
-      break;
-  }
+  const char* statusText = I18N.get(UnitLinkService::get().statusMessage());
 
   const int mid = pageHeight / 2;
   renderer.drawCenteredText(UI_10_FONT_ID, mid - 70,

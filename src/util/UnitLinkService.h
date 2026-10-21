@@ -1,6 +1,7 @@
 #pragma once
 
 #include <HalLink.h>
+#include <I18n.h>
 #include <UnitLinkSession.h>
 
 #include <string>
@@ -23,6 +24,10 @@ class UnitLinkService {
   void setBook(const std::string& epubPath, const GfxRenderer& renderer);
   // The text settings may have changed: announce the layout again if its hash moved.
   void refreshLayout(const GfxRenderer& renderer);
+  // What to tell the user about the link right now (STR_LINK_LINKED when all is well).
+  StrId statusMessage() const;
+  // Changes whenever the status or the reason for a mismatch changes.
+  uint8_t statusKey() const { return static_cast<uint8_t>(session.status()) | (session.incompatibleReasons() << 3); }
   // Call once per main loop pass.
   void tick();
   // Ends the link and restarts the unit so USB comes back.

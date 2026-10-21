@@ -69,6 +69,7 @@ class EpubReaderActivity final : public ReaderActivity {
   std::atomic<uint32_t> linkPosition{0};  // spine << 16 | page
   std::atomic<bool> linkPositionDirty{false};
   bool linkBookAnnounced = false;
+  uint8_t shownLinkKey = 0xFF;  // link status the page was last drawn for
   unsigned long linkLayoutCheckMs = 0;
 
   // Toolbar reader menu (SETTINGS.readerMenuStyle == READER_MENU_TOOLBAR): drawn
