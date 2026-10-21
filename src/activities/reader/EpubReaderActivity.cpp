@@ -1764,7 +1764,7 @@ void EpubReaderActivity::renderBook() {
   }
 
   if (showBookmarkMessage) {
-    GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+    GUI.drawPopup(renderer, bookmarkPopupText());
     if (!bookmarkMessageDrawn) {
       bookmarkMessageDrawn = true;
       bookmarkMessageTime = millis();  // the 2.5 s start once the popup is on the panel
@@ -2642,7 +2642,7 @@ bool EpubReaderActivity::showBookmarkPopupOnly() {
   if (!renderer.storeBwBuffer()) return false;
   overlayPageStored = true;
   bookmarkPopupStored = true;
-  GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  GUI.drawPopup(renderer, bookmarkPopupText());
   showBookmarkMessage = true;
   bookmarkMessageDrawn = true;
   bookmarkMessageTime = millis();
@@ -3410,8 +3410,14 @@ void EpubReaderActivity::loadCachedBookmarks() {
   updateBookmarkFlag();
 }
 
+const char* EpubReaderActivity::bookmarkPopupText() const {
+  if (bookmarkBlocked) return tr(STR_LINK_BOOKMARK_LEFT);
+  return bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED);
+}
+
 void EpubReaderActivity::addBookmark(const bool deferRender) {
-  if (!section || !epub || linkFollower()) return;  // the left unit's bookmarks are copied here
+  bookmarkBlocked = linkFollower();  // the left unit's bookmarks are copied here
+  if (!section || !epub || bookmarkBlocked) return;
   LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
   int currentPage;
   int pageCount;

@@ -52,6 +52,8 @@ class EpubReaderActivity final : public ReaderActivity {
   int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;
   bool bookmarkRemoved = false;
+  bool bookmarkBlocked = false;  // the right unit of a linked pair cannot add bookmarks
+  const char* bookmarkPopupText() const;
   std::vector<BookmarkEntry> cachedBookmarks;
   bool recentsEntryRemoved = false;
   unsigned long bookmarkMessageTime = 0UL;
