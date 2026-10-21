@@ -15,11 +15,16 @@ class HalLink : public unitlink::Port {
   // Stops the UART and gives the pins and the USB pad back; USB itself only returns after a restart.
   void end();
   bool active() const { return running; }
+  // Sets the UART up again on the same pins. A cable joined while the lines were noisy has been seen to leave the
+  // receiver deaf until the units were joined a second time; doing this while nobody answers heals that.
+  void restart();
 
   size_t write(const uint8_t* data, size_t len) override;
   int read() override;
 
  private:
+  void openPort();
+
   bool running = false;
   int rxPin = -1;
   int txPin = -1;

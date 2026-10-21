@@ -37,13 +37,23 @@ bool HalLink::begin(unitlink::Role role) {
   rxPin = role == unitlink::Role::Left ? PIN_D_MINUS : PIN_D_PLUS;
   logSerial.flush();
   CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
+  openPort();
+  running = true;
+  LOG_INF(TAG, "Link started, role=%s tx=%d rx=%d", role == unitlink::Role::Left ? "left" : "right", txPin, rxPin);
+  return true;
+}
+
+void HalLink::openPort() {
   // The first Serial1.begin on a USB pin does not take the pin; claiming both as GPIO first does.
   pinMode(rxPin, INPUT_PULLUP);
   pinMode(txPin, OUTPUT);
   Serial1.begin(LINK_BAUD, SERIAL_8N1, rxPin, txPin);
-  running = true;
-  LOG_INF(TAG, "Link started, role=%s tx=%d rx=%d", role == unitlink::Role::Left ? "left" : "right", txPin, rxPin);
-  return true;
+}
+
+void HalLink::restart() {
+  if (!running) return;
+  Serial1.end();
+  openPort();
 }
 
 void HalLink::end() {
@@ -63,6 +73,7 @@ int HalLink::read() { return running ? Serial1.read() : -1; }
 
 bool HalLink::begin(unitlink::Role) { return false; }
 void HalLink::end() {}
+void HalLink::restart() {}
 size_t HalLink::write(const uint8_t*, size_t) { return 0; }
 int HalLink::read() { return -1; }
 

@@ -50,6 +50,8 @@ class Session {
   uint8_t incompatibleReasons() const { return reasons; }
   bool isLinked() const { return currentStatus == Status::Linked; }
   Role role() const { return cfg.role; }
+  // When a valid frame from the peer last arrived (the start time before any did).
+  uint32_t lastHeardMs() const { return lastRx; }
 
   // The book or the text layout changed (the reader opened or closed a book, or its settings moved). Pairing starts
   // again with the new values, so the peer re-checks them.

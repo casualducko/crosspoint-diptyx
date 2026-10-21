@@ -76,7 +76,16 @@ void UnitLinkService::refreshLayout(const GfxRenderer& renderer) {
 
 void UnitLinkService::tick() {
   if (!running() || ending) return;
-  session.update(millis());
+  const unsigned long now = millis();
+  session.update(now);
+  // Nobody answers: set the receiver up again every few seconds, in case the cable was joined with the lines noisy.
+  constexpr unsigned long DEAF_MS = 4000;
+  const auto status = session.status();
+  if ((status == unitlink::Status::Pairing || status == unitlink::Status::Lost) &&
+      now - session.lastHeardMs() >= DEAF_MS && now - lastUartRestartMs >= DEAF_MS) {
+    lastUartRestartMs = now;
+    link.restart();
+  }
   std::string path;
   if (session.takeBookRequest(path)) openRequestedBook(path);
 }

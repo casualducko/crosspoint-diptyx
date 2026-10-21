@@ -46,6 +46,7 @@ class UnitLinkService {
   uint32_t currentBookId = 0;
   std::string lastRequestedPath;
   unsigned long lastRequestMs = 0;
+  unsigned long lastUartRestartMs = 0;
   unitlink::Session session;
   bool ending = false;
 };
