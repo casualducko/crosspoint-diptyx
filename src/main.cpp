@@ -361,6 +361,7 @@ static void deliverSleepPluginEvents() {
 void enterDeepSleep(bool fromTimeout = false, bool powerOff = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   sleepPreparing = true;
+  UnitLinkService::get().announceSleep();  // the other unit of a linked pair sleeps too
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   // Sleep may end in a power-off (battery death, latch); persist the clock
@@ -800,6 +801,12 @@ void setup() {
     gpio.update();
   }
 
+  // A linked pair comes back linked after a sleep or restart. With USB plugged in the pads stay on USB, so the Mac can
+  // still flash and log; neither does a unit that just crashed or is in recovery mode take the pads away.
+  if (!rebootedFromPanic && !recoveryFirmwareMode && !gpio.isUsbConnected()) {
+    UnitLinkService::get().startFromSavedSide(renderer);
+  }
+
   allowSleepAt = millis() + 2000;
 }
 
@@ -852,6 +859,7 @@ void loop() {
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   mappedInputManager.update();
   UnitLinkService::get().tick();
+  if (!deepSleepInProgress && UnitLinkService::get().takePeerSleep()) enterDeepSleep();
 
   if (activityManager.requiresExclusiveStorageLoop()) {
     // USB Drive handed the raw SD card to the host. Do not run screenshots,

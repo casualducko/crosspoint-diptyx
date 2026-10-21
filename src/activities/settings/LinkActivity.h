@@ -37,4 +37,5 @@ class LinkActivity final : public Activity {
   unitlink::Status shownStatus = unitlink::Status::Idle;
   uint16_t shownPage = 0;
   bool shownAcked = true;
+  unsigned long lastCountersDrawMs = 0;
 };

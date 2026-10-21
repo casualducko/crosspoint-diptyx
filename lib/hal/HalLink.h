@@ -18,6 +18,12 @@ class HalLink : public unitlink::Port {
   // Sets the UART up again on the same pins. A cable joined while the lines were noisy has been seen to leave the
   // receiver deaf until the units were joined a second time; doing this while nobody answers heals that.
   void restart();
+  // Waits until everything written has left the UART (before the unit goes to sleep).
+  void flush();
+
+  // Bytes sent and received since begin(), for the diagnostics line of the Link screen.
+  uint32_t bytesSent() const { return sentBytes; }
+  uint32_t bytesReceived() const { return receivedBytes; }
 
   size_t write(const uint8_t* data, size_t len) override;
   int read() override;
@@ -25,6 +31,8 @@ class HalLink : public unitlink::Port {
  private:
   void openPort();
 
+  uint32_t sentBytes = 0;
+  uint32_t receivedBytes = 0;
   bool running = false;
   int rxPin = -1;
   int txPin = -1;

@@ -19,7 +19,14 @@ class UnitLinkService {
   unitlink::Session& linkSession() { return session; }
 
   // Starts with no book: both units pair as soon as they see each other, and setBook() narrows that to the open book.
-  bool start(unitlink::Role role, const GfxRenderer& renderer);
+  // `remember`: keep the side so the link starts again on every boot (until endAndRestart()).
+  bool start(unitlink::Role role, const GfxRenderer& renderer, bool remember = true);
+  // Boot: starts the link on the side saved by an earlier start(), if there is one.
+  void startFromSavedSide(const GfxRenderer& renderer);
+  // Before this unit goes to deep sleep: tells the other unit to sleep too (unless it asked for this sleep).
+  void announceSleep();
+  // True once if the other unit asked for sleep.
+  bool takePeerSleep();
   // The reader opened `epubPath`, or closed its book (empty path). The text layout is taken from the current settings.
   void setBook(const std::string& epubPath, const GfxRenderer& renderer);
   // The text settings may have changed: announce the layout again if its hash moved.
@@ -28,6 +35,9 @@ class UnitLinkService {
   StrId statusMessage() const;
   // Changes whenever the status or the reason for a mismatch changes.
   uint8_t statusKey() const { return static_cast<uint8_t>(session.status()) | (session.incompatibleReasons() << 3); }
+  // For the Link screen's diagnostics line.
+  uint32_t bytesSent() const { return link.bytesSent(); }
+  uint32_t bytesReceived() const { return link.bytesReceived(); }
   // Call once per main loop pass.
   void tick();
   // Ends the link and restarts the unit so USB comes back.
@@ -49,4 +59,5 @@ class UnitLinkService {
   unsigned long lastUartRestartMs = 0;
   unitlink::Session session;
   bool ending = false;
+  bool peerAskedSleep = false;
 };

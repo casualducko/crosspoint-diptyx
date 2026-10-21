@@ -62,7 +62,10 @@ void Session::update(uint32_t nowMs) {
 
   int c;
   while ((c = port.read()) >= 0) {
-    if (parser.push(static_cast<uint8_t>(c))) handleFrame(parser.frame(), nowMs);
+    if (parser.push(static_cast<uint8_t>(c))) {
+      framesOk++;
+      handleFrame(parser.frame(), nowMs);
+    }
   }
 
   if (currentStatus == Status::Linked && nowMs - lastRx >= LOST_AFTER_MS) currentStatus = Status::Lost;

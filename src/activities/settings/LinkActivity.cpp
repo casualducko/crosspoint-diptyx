@@ -88,7 +88,11 @@ void LinkActivity::loop() {
   if (session->takeSleepRequest()) LOG_INF("LINK", "Peer asked for sleep (not acted on yet)");
 
   const bool acked = session->publishedIsAcked();
-  if (session->status() != shownStatus || testPage != shownPage || acked != shownAcked) requestUpdate();
+  const bool countersDue = millis() - lastCountersDrawMs >= 2000;
+  if (session->status() != shownStatus || testPage != shownPage || acked != shownAcked || countersDue) {
+    lastCountersDrawMs = millis();
+    requestUpdate();
+  }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     finish();
@@ -132,6 +136,15 @@ void LinkActivity::render(RenderLock&&) {
                               role == unitlink::Role::Left ? tr(STR_LINK_TEST_LEFT) : tr(STR_LINK_TEST_RIGHT));
   }
   renderer.drawCenteredText(UI_10_FONT_ID, mid + 90, tr(STR_LINK_END_HINT));
+  {
+    auto& service = UnitLinkService::get();
+    char counters[64];
+    snprintf(counters, sizeof(counters), "%u / %u, %u, %u", static_cast<unsigned>(service.bytesSent()),
+             static_cast<unsigned>(service.bytesReceived()), static_cast<unsigned>(session->framesReceived()),
+             static_cast<unsigned>(session->frameErrors()));
+    renderer.drawCenteredText(SMALL_FONT_ID, mid + 140, tr(STR_LINK_COUNTERS));
+    renderer.drawCenteredText(SMALL_FONT_ID, mid + 165, counters);
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_LINK_END), tr(STR_LINK_KEEP), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

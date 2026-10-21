@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
@@ -53,13 +54,37 @@ uint32_t UnitLinkService::layoutHashFor(const GfxRenderer& renderer) {
   return unitlink::fnv1a(CROSSPOINT_VERSION, strlen(CROSSPOINT_VERSION), h);
 }
 
-bool UnitLinkService::start(unitlink::Role role, const GfxRenderer& renderer) {
+bool UnitLinkService::start(unitlink::Role role, const GfxRenderer& renderer, bool remember) {
   if (!link.begin(role)) return false;
+  if (remember) {
+    APP_STATE.linkSide = role == unitlink::Role::Left ? 1 : 2;
+    APP_STATE.saveToFile();
+  }
   unitlink::Config config;
   config.role = role;
   config.bookId = 0;
   config.layoutHash = layoutHashFor(renderer);
   session.start(config, millis());
+  return true;
+}
+
+void UnitLinkService::startFromSavedSide(const GfxRenderer& renderer) {
+  if (!HalLink::isSupported() || running() || APP_STATE.linkSide == 0) return;
+  start(APP_STATE.linkSide == 1 ? unitlink::Role::Left : unitlink::Role::Right, renderer, false);
+}
+
+void UnitLinkService::announceSleep() {
+  if (!running() || peerAskedSleep) return;
+  const auto status = session.status();
+  if (status != unitlink::Status::Linked && status != unitlink::Status::Lost) return;
+  session.sendSleep();
+  link.flush();
+}
+
+bool UnitLinkService::takePeerSleep() {
+  if (peerAskedSleep || !running()) return false;
+  if (!session.takeSleepRequest()) return false;
+  peerAskedSleep = true;
   return true;
 }
 
@@ -110,6 +135,8 @@ void UnitLinkService::openRequestedBook(const std::string& path) {
 void UnitLinkService::endAndRestart() {
   if (ending) return;
   ending = true;
+  APP_STATE.linkSide = 0;  // USB only comes back if the link does not start again at boot
+  APP_STATE.saveToFile();
   session.stop();
   link.end();
   silentRestartToSettings();

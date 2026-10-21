@@ -52,6 +52,9 @@ class Session {
   Role role() const { return cfg.role; }
   // When a valid frame from the peer last arrived (the start time before any did).
   uint32_t lastHeardMs() const { return lastRx; }
+  // For diagnostics: frames that passed the CRC and frames that failed it.
+  uint32_t framesReceived() const { return framesOk; }
+  uint32_t frameErrors() const { return parser.crcErrors(); }
 
   // The book or the text layout changed (the reader opened or closed a book, or its settings moved). Pairing starts
   // again with the new values, so the peer re-checks them.
@@ -88,6 +91,7 @@ class Session {
   Config cfg;
   Status currentStatus = Status::Idle;
   uint8_t reasons = 0;
+  uint32_t framesOk = 0;
   uint32_t lastHelloTx = 0;
   uint32_t lastRx = 0;
   uint32_t lastStateTx = 0;

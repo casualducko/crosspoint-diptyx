@@ -38,6 +38,8 @@ bool HalLink::begin(unitlink::Role role) {
   logSerial.flush();
   CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
   openPort();
+  sentBytes = 0;
+  receivedBytes = 0;
   running = true;
   LOG_INF(TAG, "Link started, role=%s tx=%d rx=%d", role == unitlink::Role::Left ? "left" : "right", txPin, rxPin);
   return true;
@@ -56,6 +58,10 @@ void HalLink::restart() {
   openPort();
 }
 
+void HalLink::flush() {
+  if (running) Serial1.flush();
+}
+
 void HalLink::end() {
   if (!running) return;
   Serial1.end();
@@ -65,15 +71,26 @@ void HalLink::end() {
   running = false;
 }
 
-size_t HalLink::write(const uint8_t* data, size_t len) { return running ? Serial1.write(data, len) : 0; }
+size_t HalLink::write(const uint8_t* data, size_t len) {
+  if (!running) return 0;
+  const size_t n = Serial1.write(data, len);
+  sentBytes += n;
+  return n;
+}
 
-int HalLink::read() { return running ? Serial1.read() : -1; }
+int HalLink::read() {
+  if (!running) return -1;
+  const int c = Serial1.read();
+  if (c >= 0) receivedBytes++;
+  return c;
+}
 
 #else
 
 bool HalLink::begin(unitlink::Role) { return false; }
 void HalLink::end() {}
 void HalLink::restart() {}
+void HalLink::flush() {}
 size_t HalLink::write(const uint8_t*, size_t) { return 0; }
 int HalLink::read() { return -1; }
 
