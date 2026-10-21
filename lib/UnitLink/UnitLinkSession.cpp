@@ -21,6 +21,16 @@ void Session::start(const Config& config, uint32_t nowMs) {
   sendHello(nowMs);
 }
 
+void Session::setIdentity(uint32_t bookId, uint32_t layoutHash, uint32_t nowMs) {
+  if (currentStatus == Status::Idle || (cfg.bookId == bookId && cfg.layoutHash == layoutHash)) return;
+  cfg.bookId = bookId;
+  cfg.layoutHash = layoutHash;
+  currentStatus = Status::Pairing;
+  reasons = 0;
+  lastRx = nowMs;
+  sendHello(nowMs);
+}
+
 bool Session::canSendState() const { return currentStatus == Status::Linked || currentStatus == Status::Lost; }
 
 void Session::stop() { currentStatus = Status::Idle; }

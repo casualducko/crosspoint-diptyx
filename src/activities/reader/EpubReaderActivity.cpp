@@ -53,6 +53,7 @@
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
+#include "util/UnitLinkService.h"
 
 namespace {
 // The X4 Pro and X4 Classic carry the X4's panel but sit outside isXteinkDevice()
@@ -186,6 +187,7 @@ EpubReaderActivity::~EpubReaderActivity() {
   discardOverlayPage();  // free the overlay's page snapshot if one is held
 
   if (footnoteDepth > 0 && epub) saveLinkStack();
+  if (linkBookAnnounced) UnitLinkService::get().setBook("", renderer);  // no book open any more
 
   section.reset();
   if (pendingReadFolderMove && epub) {
@@ -447,6 +449,7 @@ void EpubReaderActivity::loop() {
   }
 
   rememberBookOnceRendered();
+  serviceLink();
 
   if (prefetchBusy && gpio.wasAnyPressed()) prefetchStop = true;
 
@@ -764,6 +767,7 @@ void EpubReaderActivity::loop() {
   if (!prevTriggered && !nextTriggered) {
     return;
   }
+  if (linkFollower()) return;  // the left unit turns the pages
 
   if (handleEndOfBookPageTurn(prevTriggered, nextTriggered)) {
     return;
@@ -1187,7 +1191,9 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     RenderLock lock;
     clearDeferredReposition();
   }
-  const int step = spreadActive() ? 2 : 1;  // a spread shows two pages, so a turn moves two
+  const int step = (spreadActive() || linkLeader())
+                       ? 2
+                       : 1;  // a spread (or the left unit of a link) shows two pages' worth, so a turn moves two
   // Zoom Pages: a zoomed picture page has more than one view.
   if (zoomActive) {
     if (panMode) {  // a press moves the picture; at its end the press turns as usual
@@ -1615,15 +1621,20 @@ void EpubReaderActivity::renderBook() {
     }
   }
 
+  // The right unit of a link shows the page after the left unit's: past the chapter's last page that is a blank page.
+  const bool followerPastEnd = linkFollower() && !section->isBuilding() && section->pageCount > 0 &&
+                               section->currentPage == static_cast<int>(section->pageCount);
   if (!section->isBuilding() && section->pageCount > 0 &&
-      section->currentPage >= static_cast<int>(section->pageCount)) {
+      section->currentPage >= static_cast<int>(section->pageCount) && !followerPastEnd) {
     section->currentPage = section->pageCount - 1;
   }
 
   applyDeferredReposition();
 
   // Spread pages are (0,1), (2,3), ...: keep the left page even whatever put us here (resume, jump, setting toggled).
-  if (spreadActive() && (section->currentPage & 1) && section->currentPage > 0) section->currentPage--;
+  if ((spreadActive() || linkLeader()) && (section->currentPage & 1) && section->currentPage > 0) {
+    section->currentPage--;
+  }
 
   updateSplitSpread();
   updateComicPartner(renderSpec);  // before anything is drawn: building a partner may borrow the frame buffer
@@ -1639,6 +1650,12 @@ void EpubReaderActivity::renderBook() {
     if (spreadActive()) renderSpreadRightPage(orientedMarginTop, orientedMarginLeft, true);
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
+    return;
+  }
+
+  if (followerPastEnd) {
+    renderer.displayBuffer();
+    automaticPageTurnActive = false;
     return;
   }
 
@@ -1732,6 +1749,11 @@ void EpubReaderActivity::renderBook() {
       lastSavedPage = section->currentPage;
       lastSavedPageCount = section->estimatedTotalPages();
     }
+  }
+
+  if (linkLeader()) {
+    linkPosition.store((static_cast<uint32_t>(currentSpineIndex) << 16) | static_cast<uint16_t>(section->currentPage));
+    linkPositionDirty.store(true);
   }
 
   showPendingSyncSaveError();
@@ -2298,6 +2320,55 @@ bool EpubReaderActivity::updateComicPartner(const ReaderRenderSpec& spec) {
   partnerSection = std::move(partner);
   partnerSpine = next;
   return true;
+}
+
+bool EpubReaderActivity::linkLeader() const {
+  auto& link = UnitLinkService::get();
+  return link.running() && link.role() == unitlink::Role::Left;
+}
+
+bool EpubReaderActivity::linkFollower() const {
+  auto& link = UnitLinkService::get();
+  return link.running() && link.role() == unitlink::Role::Right;
+}
+
+void EpubReaderActivity::announceLinkBook() {
+  if (epub) UnitLinkService::get().setBook(epub->getPath(), renderer);
+  linkBookAnnounced = true;
+}
+
+// Runs in the loop task. Tells the link which book is open, sends the left unit's position and moves the right unit to
+// the page after the left unit's.
+void EpubReaderActivity::serviceLink() {
+  auto& link = UnitLinkService::get();
+  if (!link.running()) return;
+  if (!linkBookAnnounced) {
+    announceLinkBook();
+  } else if (millis() - linkLayoutCheckMs >= 1000) {
+    // Text settings changed here: the new layout hash makes the peer check again.
+    linkLayoutCheckMs = millis();
+    link.refreshLayout(renderer);
+  }
+  auto& session = link.linkSession();
+  if (linkFollower()) {
+    automaticPageTurnActive = false;
+    unitlink::PageState remote;
+    if (session.takeRemote(remote) && remote.spine < epub->getSpineItemsCount()) {
+      RenderLock lock;
+      const int target = static_cast<int>(remote.page) + 1;
+      if (remote.spine == currentSpineIndex && section) {
+        section->currentPage = target;
+      } else {
+        nextPageNumber = target;
+        currentSpineIndex = remote.spine;
+        section.reset();
+      }
+      requestUpdate();
+    }
+  } else if (linkPositionDirty.exchange(false)) {
+    const uint32_t position = linkPosition.load();
+    session.publish(static_cast<uint16_t>(position >> 16), static_cast<uint16_t>(position & 0xFFFF), millis());
+  }
 }
 
 bool EpubReaderActivity::spreadActive() const {

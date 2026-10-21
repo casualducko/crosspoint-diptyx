@@ -250,3 +250,33 @@ TEST(UnitLinkSessionTest, SequenceNumberWrapsAround) {
   }
   EXPECT_EQ(last, static_cast<uint16_t>(70000 & 0xFFFF));
 }
+
+TEST(UnitLinkSessionTest, UnitsPairAfterBothOpenTheSameBook) {
+  Rig r;
+  r.left.start(r.cfg(Role::Left, 0, 9), r.now);
+  r.right.start(r.cfg(Role::Right, 0, 9), r.now);
+  r.run(500);
+  EXPECT_TRUE(r.left.isLinked());
+  r.left.setIdentity(5, 9, r.now);
+  r.run(500);
+  EXPECT_EQ(r.right.status(), Status::Incompatible);
+  r.right.setIdentity(5, 9, r.now);
+  r.run(1000);
+  EXPECT_TRUE(r.left.isLinked());
+  EXPECT_TRUE(r.right.isLinked());
+}
+
+TEST(UnitLinkSessionTest, PositionIsSentAgainAfterTheBookChanged) {
+  Rig r;
+  r.startBoth();
+  r.run(300);
+  r.left.setIdentity(5, 9, r.now);
+  r.right.setIdentity(5, 9, r.now);
+  r.run(1000);
+  r.left.publish(3, 40, r.now);
+  r.run(300);
+  PageState s;
+  ASSERT_TRUE(r.right.takeRemote(s));
+  EXPECT_EQ(s.spine, 3);
+  EXPECT_EQ(s.page, 40);
+}

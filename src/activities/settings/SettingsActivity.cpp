@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalLink.h>
 #include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>

@@ -50,6 +50,10 @@ class Session {
   bool isLinked() const { return currentStatus == Status::Linked; }
   Role role() const { return cfg.role; }
 
+  // The book or the text layout changed (the reader opened or closed a book, or its settings moved). Pairing starts
+  // again with the new values, so the peer re-checks them.
+  void setIdentity(uint32_t bookId, uint32_t layoutHash, uint32_t nowMs);
+
   // Left unit: announce the position both units should show. Resent until acked or replaced by a newer one.
   void publish(uint16_t spine, uint16_t page, uint32_t nowMs);
   bool publishedIsAcked() const { return !haveSent || acked; }

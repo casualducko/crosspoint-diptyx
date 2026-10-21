@@ -59,6 +59,18 @@ class EpubReaderActivity final : public ReaderActivity {
   bool bookmarkMessageDrawn = false;
   bool pendingReadFolderMove = false;
 
+  // Two-unit link (X4 Pro, see UnitLinkService): the left unit leads, turns pages in twos and shows page N (even); the
+  // right unit follows and shows page N+1. The render task stores the position and the loop task sends it, because the
+  // link session belongs to the loop task.
+  bool linkLeader() const;
+  bool linkFollower() const;
+  void serviceLink();
+  void announceLinkBook();
+  std::atomic<uint32_t> linkPosition{0};  // spine << 16 | page
+  std::atomic<bool> linkPositionDirty{false};
+  bool linkBookAnnounced = false;
+  unsigned long linkLayoutCheckMs = 0;
+
   // Toolbar reader menu (SETTINGS.readerMenuStyle == READER_MENU_TOOLBAR): drawn
   // over the page instead of pushing the full-screen list menu. Select opens the
   // Toolbar; its tools open the Contents/Text/More bottom-sheet panels.
