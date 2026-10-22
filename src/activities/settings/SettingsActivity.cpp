@@ -43,6 +43,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/UnitLinkService.h"
 
 namespace fui = freeink::ui;
 
@@ -113,6 +114,10 @@ void SettingsActivity::rebuildSettingsLists() {
   // Two X4 Pros joined by the pogo cable (the link cannot run on other boards).
   if (HalLink::isSupported()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_LINK_UNIT, SettingAction::LinkUnit));
+    // While the link runs, ending it takes one press instead of opening the Link screen and backing out.
+    if (UnitLinkService::get().running()) {
+      systemSettings.push_back(SettingInfo::Action(StrId::STR_LINK_CANCEL, SettingAction::EndLink));
+    }
   }
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
@@ -418,6 +423,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::LinkUnit:
         startActivityForResult(std::make_unique<LinkActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::EndLink:
+        UnitLinkService::get().endAndRestart();
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);

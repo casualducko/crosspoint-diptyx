@@ -20,9 +20,9 @@ class UnitLinkService {
 
   // Starts with no book: both units pair as soon as they see each other, and setBook() narrows that to the open book.
   // `remember`: keep the side so the link starts again on every boot (until endAndRestart()).
-  bool start(unitlink::Role role, const GfxRenderer& renderer, bool remember = true);
+  bool start(unitlink::Role role, GfxRenderer& renderer, bool remember = true);
   // Boot: starts the link on the side saved by an earlier start(), if there is one.
-  void startFromSavedSide(const GfxRenderer& renderer);
+  void startFromSavedSide(GfxRenderer& renderer);
   // Before this unit goes to deep sleep: tells the other unit to sleep too (unless it asked for this sleep).
   void announceSleep();
   // True once if the other unit asked for sleep.
@@ -33,6 +33,11 @@ class UnitLinkService {
   void bookmarksSaved(const std::string& epubPath);
   // Right unit: true once after the left unit's bookmark file replaced this unit's.
   bool takeBookmarksUpdated();
+  // Right or left unit: true once after the other unit's text settings replaced this unit's. The reader must lay the
+  // page out again.
+  bool takeTextSettingsApplied();
+  // True once after night mode was changed to follow the other unit.
+  bool takeNightApplied();
   // The text settings may have changed: announce the layout again if its hash moved.
   void refreshLayout(const GfxRenderer& renderer);
   // What to tell the user about the link right now (STR_LINK_LINKED when all is well).
@@ -45,7 +50,8 @@ class UnitLinkService {
   // Call once per main loop pass.
   void tick();
   // Ends the link and restarts the unit so USB comes back.
-  void endAndRestart();
+  // tellPeer: the other unit ends its link too.
+  void endAndRestart(bool tellPeer = true);
 
   // Both units must derive the same ids from the same files and settings.
   static uint32_t bookIdFor(const std::string& epubPath);
@@ -57,12 +63,23 @@ class UnitLinkService {
   HalLink link;
   void openRequestedBook(const std::string& path);
   void sendBookmarks();
+  void syncLayout(const GfxRenderer& renderer);
+  void applyRemoteLayout(const uint8_t* blob);
   void applyBookmarks(const std::string& json);
 
   std::string currentBookPath;
   uint32_t lastPeerFresh = 0;
   bool marksDirty = false;
   bool marksUpdated = false;
+  GfxRenderer* gfx = nullptr;
+  uint32_t announcedLayoutHash = 0;
+  bool textSettingsApplied = false;
+  bool nightApplied = false;
+  unsigned long lastDisplaySendMs = 0;
+  unsigned long lightSaveDueMs = 0;
+  unitlink::DisplayState currentDisplay() const;
+  void applyDisplay(const unitlink::DisplayState& target, unsigned long now);
+  unsigned long layoutMismatchSinceMs = 0;
 
   uint32_t currentBookId = 0;
   std::string lastRequestedPath;

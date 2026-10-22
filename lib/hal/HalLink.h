@@ -25,6 +25,15 @@ class HalLink : public unitlink::Port {
   uint32_t bytesSent() const { return sentBytes; }
   uint32_t bytesReceived() const { return receivedBytes; }
 
+  // Radio build only (no-ops on the wire). Locks the link to one peer address: frames then go to it alone and nothing
+  // from other addresses is accepted. lastSender() is the address of the newest packet heard while unlocked.
+  void lockPeer(const uint8_t* mac);
+  void unlockPeer();
+  bool peerLocked() const;
+  bool lastSender(uint8_t* out) const;
+  // The radio was taken down under the link (a send failed because ESP-NOW is gone); restart() brings it back.
+  bool radioDown() const;
+
   size_t write(const uint8_t* data, size_t len) override;
   int read() override;
 

@@ -37,6 +37,13 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   }
 
   auto wifiMode = WiFi.getMode();
+#ifdef UNITLINK_RADIO
+  // The unit link keeps the radio on without joining anything; 80 MHz is enough for that. Anything more (joined to
+  // an access point, scanning, an access point of our own) still forces full speed.
+  if (wifiMode == WIFI_MODE_STA && WiFi.status() != WL_CONNECTED && WiFi.scanComplete() != WIFI_SCAN_RUNNING) {
+    wifiMode = WIFI_MODE_NULL;
+  }
+#endif
   if (wifiMode != WIFI_MODE_NULL) {
     // Wifi is active, force disabling power saving
     enabled = false;

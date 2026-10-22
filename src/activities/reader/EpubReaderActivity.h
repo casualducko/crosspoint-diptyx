@@ -21,6 +21,10 @@
 #include "ReaderToolbarUi.h"
 #include "components/OptionPopup.h"
 
+namespace unitlink {
+struct JumpRequest;
+}
+
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
@@ -52,7 +56,7 @@ class EpubReaderActivity final : public ReaderActivity {
   int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;
   bool bookmarkRemoved = false;
-  bool bookmarkBlocked = false;  // the right unit of a linked pair cannot add bookmarks
+  unsigned long bookmarkAwaitingMs = 0;  // right unit: a bookmark toggle was sent to the left unit at this time
   const char* bookmarkPopupText() const;
   std::vector<BookmarkEntry> cachedBookmarks;
   bool recentsEntryRemoved = false;
@@ -67,6 +71,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool linkLeader() const;
   bool linkFollower() const;
   void serviceLink();
+  void applyRemoteJump(const unitlink::JumpRequest& jump);
   void announceLinkBook();
   std::atomic<uint32_t> linkPosition{0};  // spine << 16 | page
   std::atomic<bool> linkPositionDirty{false};
@@ -193,7 +198,9 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
-  void addBookmark(bool deferRender = false);  // deferRender: the caller refreshes the screen itself
+  // Toggles the bookmark of the page `pageDelta` after the current one. deferRender: the caller refreshes the screen
+  // itself. False when nothing was toggled here (the right unit of a linked pair asks the left unit instead).
+  bool addBookmark(bool deferRender = false, int pageDelta = 0);
   // Diptyx: a bookmark toggle changes neither page, so the confirmation is drawn over the current frame and taken away
   // by restoring that frame, not by re-rendering both panels (twice) with the page.
   bool showBookmarkPopupOnly();

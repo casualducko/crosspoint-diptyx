@@ -22,6 +22,7 @@ enum class SettingAction {
   Network,
   ClearCache,
   LinkUnit,
+  EndLink,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,

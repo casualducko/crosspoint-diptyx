@@ -31,6 +31,7 @@ struct Config {
   Role role = Role::Left;
   uint32_t bookId = 0;
   uint32_t layoutHash = 0;
+  DisplayState display;  // this unit's night mode and frontlight
 };
 
 class Session {
@@ -39,6 +40,11 @@ class Session {
   static constexpr uint32_t HELLO_LINKED_MS = 1000;
   static constexpr uint32_t LOST_AFTER_MS = 3500;
   static constexpr uint32_t RESEND_MS = 400;
+  static constexpr size_t KEY_QUEUE = 4;
+  static constexpr uint32_t OFFER_BLOCK_MS = 3000;
+  static constexpr uint32_t CLOSE_REPEAT_MS = 150;
+  static constexpr uint8_t CLOSE_REPEATS = 4;
+  static constexpr uint32_t LAYOUT_GIVE_UP_MS = 10000;
   static constexpr uint32_t MARKS_CHUNK_MS = 25;     // one 200-byte frame takes 17 ms on the wire
   static constexpr uint32_t MARKS_RESEND_MS = 2000;  // the whole file goes out again if nobody confirmed it
 
@@ -87,6 +93,45 @@ class Session {
   // again".
   uint32_t peerFreshCount() const { return peerFresh; }
 
+  // Right unit: ask the left unit to turn the page. One press is in flight at a time and is resent until the left unit
+  // confirms it; presses wait their turn (at most KEY_QUEUE of them). False when the link is not up or the queue is
+  // full.
+  bool sendKey(KeyAction action, uint32_t nowMs);
+  // Left unit: the next pending press from the right unit, oldest first.
+  bool takeKey(KeyAction& action);
+
+  // Right unit: ask the left unit to jump to a place (a bookmark or chapter chosen here). One request is in flight; a
+  // newer one replaces it. Resent until the left unit confirms; dropped if the link goes down first.
+  bool sendGoto(const JumpRequest& jump, uint32_t nowMs);
+  // Left unit: true once for each request from the right unit.
+  bool takeGoto(JumpRequest& jump);
+
+  // Either unit: this unit left the book `bookId` (Home). The peer, if it has the same book open, leaves too. Sent a
+  // few times, because nothing confirms it; the peer ignores it unless the book matches, so a stale copy does no harm.
+  void sendClose(uint32_t bookId, uint32_t nowMs);
+  // True once when the peer left the book this unit has open.
+  bool takeClose();
+
+  // Either unit: hand the text settings to the peer, which adopts them. Resent until confirmed (for at most
+  // LAYOUT_GIVE_UP_MS). If both units send at once the left unit's wins: it ignores the right unit's while its own is
+  // unconfirmed, and the right unit drops its own when the left unit's arrives.
+  bool publishLayout(const uint8_t* blob, uint32_t nowMs);
+  bool layoutUnconfirmed() const { return layoutUnacked; }
+  // True once for each new settings blob from the peer (LAYOUT_BLOB_LEN bytes are written to out).
+  bool takeLayout(uint8_t* out);
+
+  // Night mode and frontlight ride on the Hello heartbeat. setDisplay() is called when the local state changes;
+  // takeDisplay() is true once for each change of the peer's (and, on the right unit, once at first contact if the
+  // left unit's differs: the left unit wins there). The caller applies it and calls setDisplay() with the result.
+  void setDisplay(const DisplayState& state, uint32_t nowMs);
+  const DisplayState& display() const { return cfg.display; }
+  bool takeDisplay(DisplayState& out);
+
+  // Either unit: the user ended the link here; the peer ends it too. One frame per call (the caller repeats it, as
+  // nothing confirms it). takeEndRequest() is true once on the receiving side, and only while the link is up.
+  void sendEnd();
+  bool takeEndRequest();
+
   // Either unit: ask the peer to sleep too. takeSleepRequest() is true once on the receiving side.
   void sendSleep();
   bool takeSleepRequest();
@@ -99,6 +144,9 @@ class Session {
   bool canSendState() const;
   void sendMarksChunk(uint32_t nowMs);
   void handleMarks(const Frame& f, uint32_t nowMs);
+  void sendKeyFrame(uint32_t nowMs);
+  void sendGotoFrame(uint32_t nowMs);
+  void sendLayoutFrame(uint32_t nowMs);
 
   Port& port;
   Parser parser;
@@ -120,12 +168,57 @@ class Session {
   bool haveRemote = false;
   bool remoteDelivered = true;
   bool sleepRequested = false;
+  bool endRequested = false;
 
   std::string bookPath;       // the open book
   std::string requestedPath;  // the newest path received
   uint32_t peerBookId = 0;
   bool bookRequested = false;
   uint32_t peerFresh = 0;
+
+  // The text settings being handed over, and the newest ones received.
+  uint8_t layoutOut[LAYOUT_BLOB_LEN] = {};
+  uint16_t layoutOutCrc = 0;
+  bool layoutUnacked = false;
+  uint32_t layoutSince = 0;
+  uint32_t lastLayoutTx = 0;
+  uint8_t layoutIn[LAYOUT_BLOB_LEN] = {};
+  bool layoutReady = false;
+  bool haveAppliedLayout = false;
+  bool peerDisplayKnown = false;
+  DisplayState peerDisplay;
+  bool displayPending = false;
+  DisplayState displayPendingValue;
+  uint16_t appliedLayoutCrc = 0;
+
+  // Right side: presses waiting to be confirmed (the first one is in flight).
+  KeyAction keyOut[KEY_QUEUE] = {};
+  size_t keyOutCount = 0;
+  uint16_t keySeq = 0;
+  uint32_t lastKeyTx = 0;
+  // Left side: presses received and not yet taken, and the seq of the last one (a repeat is only confirmed again).
+  KeyAction keyIn[KEY_QUEUE] = {};
+  size_t keyInCount = 0;
+  uint16_t lastKeySeq = 0;
+  bool haveKeySeq = false;
+
+  // Close: sent a few times; received once, and a book offer is held back for a while after it.
+  uint32_t closeOutId = 0;
+  uint8_t closeOutLeft = 0;
+  uint32_t lastCloseTx = 0;
+  bool closeReady = false;
+  bool offerBlocked = false;
+  uint32_t offerBlockedAt = 0;
+
+  // Goto: right side one request in flight; left side the last one received and not yet taken.
+  JumpRequest gotoOut;
+  bool gotoOutPending = false;
+  uint16_t gotoSeq = 0;
+  uint32_t lastGotoTx = 0;
+  JumpRequest gotoIn;
+  bool gotoInReady = false;
+  uint16_t lastGotoSeq = 0;
+  bool haveGotoSeq = false;
 
   // Left side: the bookmark file being sent.
   std::string marksOut;

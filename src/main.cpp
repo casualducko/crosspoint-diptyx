@@ -803,7 +803,12 @@ void setup() {
 
   // A linked pair comes back linked after a sleep or restart. With USB plugged in the pads stay on USB, so the Mac can
   // still flash and log; neither does a unit that just crashed or is in recovery mode take the pads away.
-  if (!rebootedFromPanic && !recoveryFirmwareMode && !gpio.isUsbConnected()) {
+#ifdef UNITLINK_RADIO
+  constexpr bool linkTakesUsb = false;  // the radio link leaves the pads alone
+#else
+  const bool linkTakesUsb = true;
+#endif
+  if (!rebootedFromPanic && !recoveryFirmwareMode && (!linkTakesUsb || !gpio.isUsbConnected())) {
     UnitLinkService::get().startFromSavedSide(renderer);
   }
 

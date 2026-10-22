@@ -29,6 +29,10 @@ TEST(UnitLinkProtocolTest, MessagesRoundTrip) {
   h.bookId = 0xDEADBEEF;
   h.layoutHash = 0x01020304;
   h.linked = true;
+  h.display.night = true;
+  h.display.brightness = 65;
+  h.display.warmth = 30;
+  h.display.lightOn = true;
   ASSERT_EQ(feed(p, buf, encodeHello(h, buf), fr), 1);
   Hello g;
   ASSERT_TRUE(decodeHello(fr.back(), g));
@@ -36,6 +40,10 @@ TEST(UnitLinkProtocolTest, MessagesRoundTrip) {
   EXPECT_EQ(g.bookId, 0xDEADBEEFu);
   EXPECT_EQ(g.layoutHash, 0x01020304u);
   EXPECT_TRUE(g.linked);
+  EXPECT_TRUE(g.display.night);
+  EXPECT_EQ(g.display.brightness, 65);
+  EXPECT_EQ(g.display.warmth, 30);
+  EXPECT_TRUE(g.display.lightOn);
 
   PageState s;
   s.seq = 65535;
@@ -192,4 +200,71 @@ TEST(UnitLinkProtocolTest, MarksChunkRoundTripsAndLimitsItsData) {
   // The bare header, with no data, is not a chunk.
   EXPECT_FALSE(lengthAllowed(Type::Marks, MARKS_HEADER_LEN));
   EXPECT_TRUE(lengthAllowed(Type::MarksAck, 2));
+}
+
+TEST(UnitLinkProtocolTest, KeyRoundTripsAndRejectsUnknownActions) {
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  Parser p;
+  std::vector<Frame> fr;
+  ASSERT_EQ(feed(p, buf, encodeKey(513, KeyAction::PrevPage, buf), fr), 1);
+  uint16_t seq = 0;
+  KeyAction a = KeyAction::NextPage;
+  ASSERT_TRUE(decodeKey(fr.back(), seq, a));
+  EXPECT_EQ(seq, 513);
+  EXPECT_EQ(a, KeyAction::PrevPage);
+  ASSERT_EQ(feed(p, buf, encodeKey(1, KeyAction::ToggleBookmark, buf), fr), 1);
+  ASSERT_TRUE(decodeKey(fr.back(), seq, a));
+  EXPECT_EQ(a, KeyAction::ToggleBookmark);
+  fr.back().payload[2] = 77;
+  EXPECT_FALSE(decodeKey(fr.back(), seq, a));
+  EXPECT_FALSE(lengthAllowed(Type::Key, 2));
+}
+
+TEST(UnitLinkProtocolTest, LayoutFrameCarriesTheCrcAndTheBlob) {
+  uint8_t blob[LAYOUT_BLOB_LEN];
+  for (size_t i = 0; i < sizeof(blob); i++) blob[i] = static_cast<uint8_t>(i * 3);
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  Parser p;
+  std::vector<Frame> fr;
+  const uint16_t crc = crc16(blob, sizeof(blob));
+  ASSERT_EQ(feed(p, buf, encodeLayout(crc, blob, buf), fr), 1);
+  EXPECT_EQ(fr.back().type, Type::Layout);
+  EXPECT_EQ(get16(fr.back().payload), crc);
+  EXPECT_EQ(memcmp(fr.back().payload + 2, blob, sizeof(blob)), 0);
+  EXPECT_FALSE(lengthAllowed(Type::Layout, LAYOUT_LEN - 1));
+}
+
+TEST(UnitLinkProtocolTest, GotoRoundTrips) {
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  Parser p;
+  std::vector<Frame> fr;
+  JumpRequest j;
+  j.spine = 300;
+  j.page = 65000;
+  j.kind = JumpKind::Offset;
+  j.value = 0xA1B2C3D4;
+  ASSERT_EQ(feed(p, buf, encodeGoto(513, j, buf), fr), 1);
+  uint16_t seq = 0;
+  JumpRequest g;
+  ASSERT_TRUE(decodeGoto(fr.back(), seq, g));
+  EXPECT_EQ(seq, 513);
+  EXPECT_EQ(g.spine, 300);
+  EXPECT_EQ(g.page, 65000);
+  EXPECT_TRUE(g.kind == JumpKind::Offset);
+  EXPECT_EQ(g.value, 0xA1B2C3D4u);
+  fr.back().payload[6] = 3;
+  EXPECT_FALSE(decodeGoto(fr.back(), seq, g));
+  EXPECT_FALSE(lengthAllowed(Type::Goto, 10));
+  EXPECT_TRUE(lengthAllowed(Type::GotoAck, 2));
+}
+
+TEST(UnitLinkProtocolTest, CloseRoundTrips) {
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  Parser p;
+  std::vector<Frame> fr;
+  ASSERT_EQ(feed(p, buf, encodeClose(0xCAFEF00D, buf), fr), 1);
+  uint32_t id = 0;
+  ASSERT_TRUE(decodeClose(fr.back(), id));
+  EXPECT_EQ(id, 0xCAFEF00Du);
+  EXPECT_FALSE(lengthAllowed(Type::Close, 3));
 }

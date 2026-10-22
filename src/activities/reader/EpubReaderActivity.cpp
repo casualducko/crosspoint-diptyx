@@ -652,10 +652,11 @@ void EpubReaderActivity::loop() {
   if (confirmLongPressed) {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
-        addBookmark(/*deferRender=*/BoardConfig::isDiptyx());
-        showBookmarkMessage = true;
-        bookmarkMessageTime = millis();
-        if (!showBookmarkPopupOnly()) requestUpdate();
+        if (addBookmark(/*deferRender=*/BoardConfig::isDiptyx())) {
+          showBookmarkMessage = true;
+          bookmarkMessageTime = millis();
+          if (!showBookmarkPopupOnly()) requestUpdate();
+        }
         break;
       case CrossPointSettings::LP_MENU_KOSYNC:
         if (launchKOReaderSync()) {
@@ -676,10 +677,11 @@ void EpubReaderActivity::loop() {
     switch (mappedInput.homeButtonAction()) {
       case HomeButtonAction::Bookmark:
         if (!showBookmarkMessage) {
-          addBookmark(/*deferRender=*/BoardConfig::isDiptyx());
-          showBookmarkMessage = true;
-          bookmarkMessageTime = millis();
-          if (!showBookmarkPopupOnly()) requestUpdate();
+          if (addBookmark(/*deferRender=*/BoardConfig::isDiptyx())) {
+            showBookmarkMessage = true;
+            bookmarkMessageTime = millis();
+            if (!showBookmarkPopupOnly()) requestUpdate();
+          }
         }
         return;
       case HomeButtonAction::Sync:
@@ -767,7 +769,12 @@ void EpubReaderActivity::loop() {
   if (!prevTriggered && !nextTriggered) {
     return;
   }
-  if (linkFollower()) return;  // the left unit turns the pages
+  if (linkFollower()) {
+    // The left unit turns the pages; the press goes there and the new position comes back.
+    UnitLinkService::get().linkSession().sendKey(
+        nextTriggered ? unitlink::KeyAction::NextPage : unitlink::KeyAction::PrevPage, millis());
+    return;
+  }
 
   if (handleEndOfBookPageTurn(prevTriggered, nextTriggered)) {
     return;
@@ -848,6 +855,16 @@ void EpubReaderActivity::jumpToPercent(int percent) {
       (spineSize == 0) ? 0.0f : static_cast<float>(targetSize - prevCumulative) / static_cast<float>(spineSize);
   pendingSpineProgress = std::clamp(pendingSpineProgress, 0.0f, 1.0f);
 
+  if (linkFollower()) {  // the left unit owns the position
+    unitlink::JumpRequest jump;
+    jump.spine = static_cast<uint16_t>(targetSpineIndex);
+    jump.kind = unitlink::JumpKind::Fraction;
+    jump.value = static_cast<uint32_t>(pendingSpineProgress * 1000000.0f);
+    UnitLinkService::get().linkSession().sendGoto(jump, millis());
+    requestUpdate();
+    return;
+  }
+
   {
     RenderLock lock;
     clearDeferredReposition();
@@ -866,6 +883,30 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openReaderMenu();
     } else {
       const auto& sync = std::get<ProgressChangeResult>(result.data);
+
+      if (linkFollower()) {
+        // The left unit owns the position: it jumps and the new position comes back.
+        unitlink::JumpRequest jump;
+        int spine = sync.spineIndex;
+        int page = std::max(0, sync.page);
+        if (sync.hasVisibleTextOffset) {
+          jump.kind = unitlink::JumpKind::Offset;
+          jump.value = static_cast<uint32_t>(sync.visibleTextOffset);
+        } else if (sync.hasSavedProgress) {
+          const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+          const CrossPointPosition mapped = ProgressMapper::toCrossPoint(epub, {sync.xpath, sync.percentage}, renderer,
+                                                                         currentSpineIndex, totalPages);
+          spine = mapped.spineIndex;
+          page = std::max(0, mapped.pageNumber);
+        }
+        if (spine >= 0 && spine < epub->getSpineItemsCount()) {
+          jump.spine = static_cast<uint16_t>(spine);
+          jump.page = static_cast<uint16_t>(std::min(page, 65535));
+          UnitLinkService::get().linkSession().sendGoto(jump, millis());
+        }
+        requestUpdate();
+        return;
+      }
 
       if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
         RenderLock lock;
@@ -942,6 +983,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               return;
             }
             const auto& chapterResult = std::get<ChapterResult>(result.data);
+            if (linkFollower()) {  // the left unit owns the position
+              unitlink::JumpRequest jump;
+              jump.spine = static_cast<uint16_t>(std::max(0, chapterResult.spineIndex));
+              UnitLinkService::get().linkSession().sendGoto(jump, millis());
+              requestUpdate();
+              return;
+            }
             RenderLock lock;
             clearDeferredReposition();
             currentSpineIndex = chapterResult.spineIndex;
@@ -2358,14 +2406,27 @@ void EpubReaderActivity::serviceLink() {
   // A status popup is drawn over the page while the link is not up, so a change means the page must be drawn again.
   if (link.statusKey() != shownLinkKey) requestUpdate();
   auto& session = link.linkSession();
+  if (link.takeTextSettingsApplied()) applyReaderTextSettings();  // the other unit changed the text settings
+  if (link.takeNightApplied()) discardOverlayPage();              // night mode flipped; the overlay snapshot is stale
   if (linkFollower() && link.takeBookmarksUpdated()) {
     const bool wasBookmarked = currentPageBookmarked;
     {
       RenderLock lock;
       loadCachedBookmarks();
     }
-    if (currentPageBookmarked != wasBookmarked) requestUpdate();
+    if (currentPageBookmarked != wasBookmarked) {
+      if (bookmarkAwaitingMs != 0) {  // the answer to a toggle made here: say what happened, as on the left unit
+        bookmarkAwaitingMs = 0;
+        bookmarkRemoved = wasBookmarked;
+        showBookmarkMessage = true;
+        bookmarkMessageTime = millis();
+        if (!showBookmarkPopupOnly()) requestUpdate();
+      } else {
+        requestUpdate();
+      }
+    }
   }
+  if (bookmarkAwaitingMs != 0 && millis() - bookmarkAwaitingMs > 6000) bookmarkAwaitingMs = 0;
   if (linkFollower()) {
     automaticPageTurnActive = false;
     unitlink::PageState remote;
@@ -2381,10 +2442,54 @@ void EpubReaderActivity::serviceLink() {
       }
       requestUpdate();
     }
-  } else if (linkPositionDirty.exchange(false)) {
+  } else {
+    unitlink::JumpRequest jump;
+    if (session.takeGoto(jump)) applyRemoteJump(jump);
+    unitlink::KeyAction key;
+    while (session.takeKey(key)) {
+      if (key == unitlink::KeyAction::ToggleBookmark) {
+        addBookmark(/*deferRender=*/true, /*pageDelta=*/1);  // the page the right unit shows
+      } else {
+        pendingManualTurn = key == unitlink::KeyAction::NextPage ? 1 : -1;
+      }
+    }
+  }
+  if (!linkFollower() && linkPositionDirty.exchange(false)) {
     const uint32_t position = linkPosition.load();
     session.publish(static_cast<uint16_t>(position >> 16), static_cast<uint16_t>(position & 0xFFFF), millis());
   }
+}
+
+// The right unit picked a place (bookmark, chapter, percent): the left unit goes there and the right unit follows.
+void EpubReaderActivity::applyRemoteJump(const unitlink::JumpRequest& jump) {
+  if (!epub || jump.spine >= epub->getSpineItemsCount()) return;
+  RenderLock lock;
+  clearDeferredReposition();
+  const bool sameChapter = section && currentSpineIndex == jump.spine;
+  if (jump.kind == unitlink::JumpKind::Offset) {
+    if (sameChapter) {
+      const auto page = section->getPageForVisibleTextOffset(jump.value);
+      section->currentPage = page.value_or(jump.page);
+    } else {
+      currentSpineIndex = jump.spine;
+      pendingOffsetJump = jump.value;
+      nextPageNumber = jump.page;
+      section.reset();
+    }
+  } else if (jump.kind == unitlink::JumpKind::Fraction) {
+    pendingSpineProgress = std::clamp(static_cast<float>(jump.value) / 1000000.0f, 0.0f, 1.0f);
+    currentSpineIndex = jump.spine;
+    nextPageNumber = 0;
+    pendingPercentJump = true;
+    section.reset();
+  } else if (sameChapter) {
+    section->currentPage = jump.page;
+  } else {
+    currentSpineIndex = jump.spine;
+    nextPageNumber = jump.page;
+    section.reset();
+  }
+  requestUpdate();
 }
 
 bool EpubReaderActivity::spreadActive() const {
@@ -2894,6 +2999,15 @@ void EpubReaderActivity::handleOverlayInput() {
   const auto gotoSpine = [this](int target) {
     const int spineCount = epub->getSpineItemsCount();
     target = std::clamp(target, 0, spineCount - 1);
+    if (linkFollower()) {  // the left unit owns the position
+      if (target != currentSpineIndex) {
+        unitlink::JumpRequest jump;
+        jump.spine = static_cast<uint16_t>(target);
+        UnitLinkService::get().linkSession().sendGoto(jump, millis());
+      }
+      requestUpdate();
+      return;
+    }
     if (target != currentSpineIndex) {
       RenderLock lock;
       clearDeferredReposition();
@@ -3005,7 +3119,11 @@ void EpubReaderActivity::handleOverlayInput() {
       }
     } else if (overlay == Overlay::Contents) {
       const auto item = epub->getTocItem(panelIndex);
-      if (item.spineIndex != -1) {
+      if (item.spineIndex != -1 && linkFollower()) {  // the left unit owns the position
+        unitlink::JumpRequest jump;
+        jump.spine = static_cast<uint16_t>(item.spineIndex);
+        UnitLinkService::get().linkSession().sendGoto(jump, millis());
+      } else if (item.spineIndex != -1) {
         RenderLock lock;
         clearDeferredReposition();
         currentSpineIndex = item.spineIndex;
@@ -3279,10 +3397,11 @@ void EpubReaderActivity::activateMoreRow(int row) {
   if (action == MA::TOGGLE_BOOKMARK) {
     // No child activity here to trigger the re-render the list menu relies on:
     // show the same confirmation popup the long-press path does.
-    addBookmark(/*deferRender=*/BoardConfig::isDiptyx());
-    showBookmarkMessage = true;
-    bookmarkMessageTime = millis();
-    if (!showBookmarkPopupOnly()) requestUpdate();
+    if (addBookmark(/*deferRender=*/BoardConfig::isDiptyx())) {
+      showBookmarkMessage = true;
+      bookmarkMessageTime = millis();
+      if (!showBookmarkPopupOnly()) requestUpdate();
+    }
     return;
   }
   onReaderMenuConfirm(action);
@@ -3411,23 +3530,41 @@ void EpubReaderActivity::loadCachedBookmarks() {
 }
 
 const char* EpubReaderActivity::bookmarkPopupText() const {
-  if (bookmarkBlocked) return tr(STR_LINK_BOOKMARK_LEFT);
   return bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED);
 }
 
-void EpubReaderActivity::addBookmark(const bool deferRender) {
-  bookmarkBlocked = linkFollower();  // the left unit's bookmarks are copied here
-  if (!section || !epub || bookmarkBlocked) return;
+bool EpubReaderActivity::addBookmark(const bool deferRender, const int pageDelta) {
+  if (linkFollower()) {
+    // The left unit keeps the bookmark file; the new file comes back and serviceLink() shows what happened.
+    if (UnitLinkService::get().linkSession().sendKey(unitlink::KeyAction::ToggleBookmark, millis())) {
+      bookmarkAwaitingMs = millis();
+    }
+    return false;
+  }
+  if (!section || !epub) return false;
   LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
   int currentPage;
   int pageCount;
+  SavedProgressPosition progress;
+  std::string pageText;
+  std::optional<uint32_t> pageOffset;
   {
+    // For a page other than the current one the section is pointed at it while the page's data is read.
     RenderLock lock;
     pageCount = section->estimatedTotalPages();
-    currentPage = section->currentPage;
+    const int shownPage = section->currentPage;
+    currentPage = shownPage + pageDelta;
+    if (currentPage < 0 || currentPage >= pageCount || currentPage >= static_cast<int>(section->pageCount)) {
+      return false;  // no such page (the right unit shows a blank one past the chapter's end)
+    }
+    section->currentPage = currentPage;
+    progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+    pageText = section->getTextFromSectionFile();
+    pageOffset = pageDelta == 0 && currentPageVisibleOffset.has_value()
+                     ? currentPageVisibleOffset
+                     : section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
+    section->currentPage = shownPage;
   }
-
-  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
   const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, currentPage, pageCount);
 
   const size_t bookmarkCountBeforeToggle = cachedBookmarks.size();
@@ -3439,12 +3576,7 @@ void EpubReaderActivity::addBookmark(const bool deferRender) {
                         cachedBookmarks.end());
   if (cachedBookmarks.size() != bookmarkCountBeforeToggle) {
     bookmarkRemoved = true;
-    currentPageBookmarked = false;
   } else {
-    std::string pageText;
-    if (currentPage >= 0 && currentPage < pageCount) {
-      pageText = section->getTextFromSectionFile();
-    }
     BookmarkEntry entry;
     entry.percentage = progress.percentage;
     entry.xpath = progress.xpath;
@@ -3452,24 +3584,20 @@ void EpubReaderActivity::addBookmark(const bool deferRender) {
     entry.computedSpineIndex = currentSpineIndex;
     entry.computedChapterPageCount = pageCount;
     entry.computedChapterProgress = currentPage;
-    const std::optional<uint32_t> offset =
-        currentPageVisibleOffset.has_value() ? currentPageVisibleOffset
-        : (currentPage >= 0 && currentPage < section->pageCount)
-            ? section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage))
-            : std::nullopt;
-    if (offset.has_value()) {
-      entry.visibleTextOffset = *offset;
+    if (pageOffset.has_value()) {
+      entry.visibleTextOffset = *pageOffset;
       entry.hasVisibleTextOffset = true;
     }
     cachedBookmarks.insert(cachedBookmarks.begin(), entry);
     bookmarkRemoved = false;
-    currentPageBookmarked = true;
   }
+  updateBookmarkFlag();
 
   if (!BookmarkFile::save(epub->getPath(), cachedBookmarks)) {
     LOG_ERR("ERS", "Failed to save bookmarks");
   }
-  if (!deferRender) requestUpdate();
+  if (!deferRender && pageDelta == 0) requestUpdate();
+  return true;
 }
 
 void EpubReaderActivity::updateBookmarkFlag() {
