@@ -58,6 +58,7 @@ void Session::setIdentity(uint32_t bookId, uint32_t layoutHash, uint32_t nowMs) 
   haveGotoSeq = false;
   peerDisplayKnown = false;
   displayPending = false;
+  displayPendingParts = 0;
   sendHello(nowMs);
 }
 
@@ -299,19 +300,18 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
       if (!decodeHello(f, peer)) return;
       // A peer that is not linked yet has just started: its state counts as a first contact, where the left unit wins.
       if (!peer.linked) peerDisplayKnown = false;
+      uint8_t news = 0;
       if (!peerDisplayKnown) {
         peerDisplayKnown = true;
-        peerDisplay = peer.display;
-        if (cfg.role == Role::Right && peer.display != cfg.display) {
-          displayPending = true;
-          displayPendingValue = peer.display;
-        }
-      } else if (peer.display != peerDisplay) {
-        peerDisplay = peer.display;
-        if (peer.display != cfg.display) {
-          displayPending = true;
-          displayPendingValue = peer.display;
-        }
+        if (cfg.role == Role::Right) news = displayDiff(peer.display, cfg.display);
+      } else {
+        news = displayDiff(peer.display, peerDisplay) & displayDiff(peer.display, cfg.display);
+      }
+      peerDisplay = peer.display;
+      if (news) {
+        displayPending = true;
+        displayPendingValue = peer.display;
+        displayPendingParts |= news;
       }
       Hello self;
       self.role = cfg.role;
@@ -504,10 +504,12 @@ void Session::setDisplay(const DisplayState& state, uint32_t nowMs) {
   if (currentStatus != Status::Idle) sendHello(nowMs);
 }
 
-bool Session::takeDisplay(DisplayState& out) {
+bool Session::takeDisplay(DisplayState& out, uint8_t* parts) {
   if (!displayPending) return false;
   displayPending = false;
   out = displayPendingValue;
+  if (parts) *parts = displayPendingParts;
+  displayPendingParts = 0;
   return true;
 }
 

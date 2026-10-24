@@ -390,6 +390,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t tiltPageTurn = TILT_OFF;
   // Master reader-touch toggle on boards with a touch controller.
   uint8_t touchReaderControls = TOUCH_READER_ON;
+  // X4 Pro in a two-unit case: lock touch while the other unit lies against this one (radio build).
+  uint8_t caseAutoLock = 1;
   // Which gestures turn the page in each direction (PAGE_TURN_GESTURE).
   uint8_t pageTurnGesture = SWIPE_ONLY;
   uint8_t previousPageGesture = SWIPE_ONLY;

@@ -144,6 +144,11 @@ void LinkActivity::render(RenderLock&&) {
              static_cast<unsigned>(session->frameErrors()));
     renderer.drawCenteredText(SMALL_FONT_ID, mid + 140, tr(STR_LINK_COUNTERS));
     renderer.drawCenteredText(SMALL_FONT_ID, mid + 165, counters);
+    if (service.signalDbm() != 0) {
+      char signal[40];
+      snprintf(signal, sizeof(signal), "%s %d", tr(STR_LINK_SIGNAL), service.signalDbm());
+      renderer.drawCenteredText(SMALL_FONT_ID, mid + 190, signal);
+    }
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_LINK_END), tr(STR_LINK_KEEP), "", "");

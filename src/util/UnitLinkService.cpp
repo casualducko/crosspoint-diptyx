@@ -15,6 +15,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "util/BookmarkUtil.h"
+#include "util/TouchLock.h"
 
 UnitLinkService& UnitLinkService::get() {
   static UnitLinkService instance;
@@ -207,9 +208,56 @@ void UnitLinkService::applyRemoteLayout(const uint8_t* blob) {
   LOG_INF("LINK", "Text settings adopted from the other unit");
 }
 
+// Radio build: the other unit lying against this one (a closed case) shows as a very strong signal, about -10 dBm
+// against -40 when the case is open. Closing the case locks touch, opening it unlocks.
+void UnitLinkService::watchCase(unsigned long now) {
+  constexpr int CLOSED_DBM = -14;
+  constexpr int OPEN_DBM = -17;
+  constexpr unsigned long SETTLE_MS = 2000;
+  constexpr uint32_t FRESH_MS = 3000;
+  if (!caseKnown) {  // a lock kept from before sleep counts as "case closed": the first reading may open it
+    caseKnown = true;
+    caseClosed = touchlock::locked();
+  }
+  const int rssi = link.lastRssi();
+  if (!SETTINGS.caseAutoLock || rssi == 0 || link.lastRssiAgeMs() > FRESH_MS) {
+    caseSinceMs = 0;
+    return;
+  }
+  signalAverage = signalAverage == 0 ? rssi : (signalAverage * 3 + rssi) / 4;
+  const bool wantClosed = caseClosed ? signalAverage > OPEN_DBM : signalAverage >= CLOSED_DBM;
+  if (wantClosed == caseClosed) {
+    caseSinceMs = 0;
+    return;
+  }
+  if (caseSinceMs == 0) caseSinceMs = now;
+  if (now - caseSinceMs < SETTLE_MS) return;
+  caseSinceMs = 0;
+  caseClosed = wantClosed;
+  LOG_INF("LINK", "Case %s (signal %d dBm)", caseClosed ? "closed" : "open", signalAverage);
+  touchlock::set(caseClosed);
+  // Closed, the units face each other: the light would only shine into the other screen. Back on when the case opens
+  // (the other unit's change arrives the same way if it saw the case change later).
+  if (Frontlight.present()) {
+    if (caseClosed && Frontlight.isOn()) {
+      lightOffByCase = true;
+      Frontlight.setOn(false);
+    } else if (!caseClosed && lightOffByCase) {
+      lightOffByCase = false;
+      Frontlight.setOn(true);
+    } else {
+      return;
+    }
+    SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
+    lightSaveDueMs = now + 1000;
+    session.setDisplay(currentDisplay(), now);
+  }
+}
+
 unitlink::DisplayState UnitLinkService::currentDisplay() const {
   unitlink::DisplayState d;
   d.night = SETTINGS.screenInverted != 0;
+  d.locked = touchlock::locked();
   if (Frontlight.present()) {
     d.lightOn = Frontlight.isOn();
     d.brightness = std::min<uint8_t>(Frontlight.brightness(), 100);
@@ -218,21 +266,35 @@ unitlink::DisplayState UnitLinkService::currentDisplay() const {
   return d;
 }
 
-void UnitLinkService::applyDisplay(const unitlink::DisplayState& target, unsigned long now) {
-  if ((SETTINGS.screenInverted != 0) != target.night) {
+void UnitLinkService::applyDisplay(const unitlink::DisplayState& target, uint8_t parts, unsigned long now) {
+  // The other unit saw the case close or open before this one did: the light follows the lock, and this unit must
+  // remember (or give back) the light it lost, whatever its own signal reading says.
+  const bool lightWasOn = Frontlight.present() && Frontlight.isOn();
+  const bool lockChanged = (parts & unitlink::DISPLAY_LOCK) != 0 && target.locked != touchlock::locked();
+  if (lockChanged && target.locked && (parts & unitlink::DISPLAY_LIGHT) && lightWasOn && !target.lightOn) {
+    lightOffByCase = true;
+  }
+  if (parts & unitlink::DISPLAY_LOCK) touchlock::set(target.locked);
+  if ((parts & unitlink::DISPLAY_NIGHT) && (SETTINGS.screenInverted != 0) != target.night) {
     SETTINGS.screenInverted = target.night ? 1 : 0;
     SETTINGS.saveToFile();
     nightApplied = true;
     activityManager.requestUpdate();
     LOG_INF("LINK", "Night mode %s, as on the other unit", target.night ? "on" : "off");
   }
-  if (Frontlight.present()) {
+  if ((parts & unitlink::DISPLAY_LIGHT) && Frontlight.present()) {
     Frontlight.setBrightness(target.brightness);
     if (Frontlight.hasColorTemperature()) Frontlight.setWarmth(target.warmth);
     Frontlight.setOn(target.lightOn);
     SETTINGS.frontlightBrightness = target.brightness;
     if (Frontlight.hasColorTemperature()) SETTINGS.frontlightWarmth = target.warmth;
     SETTINGS.frontlightOn = target.lightOn ? 1 : 0;
+    lightSaveDueMs = now + 1000;
+  }
+  if (lockChanged && !target.locked && lightOffByCase && Frontlight.present()) {
+    lightOffByCase = false;
+    Frontlight.setOn(true);
+    SETTINGS.frontlightOn = 1;
     lightSaveDueMs = now + 1000;
   }
   session.setDisplay(currentDisplay(), now);
@@ -277,7 +339,8 @@ void UnitLinkService::tick() {
   // Night mode and the frontlight follow the other unit; a change made here goes the other way. While a slider is
   // dragged the state moves continuously, so local changes are sent at most every DISPLAY_SEND_MS.
   unitlink::DisplayState remoteDisplay;
-  if (session.takeDisplay(remoteDisplay)) applyDisplay(remoteDisplay, now);
+  uint8_t remoteParts = 0;
+  if (session.takeDisplay(remoteDisplay, &remoteParts)) applyDisplay(remoteDisplay, remoteParts, now);
   constexpr unsigned long DISPLAY_SEND_MS = 150;
   if (now - lastDisplaySendMs >= DISPLAY_SEND_MS) {
     const unitlink::DisplayState local = currentDisplay();
@@ -286,6 +349,7 @@ void UnitLinkService::tick() {
       session.setDisplay(local, now);
     }
   }
+  watchCase(now);
   if (lightSaveDueMs != 0 && now >= lightSaveDueMs) {  // not on every step of a slider
     lightSaveDueMs = 0;
     SETTINGS.saveToFile();

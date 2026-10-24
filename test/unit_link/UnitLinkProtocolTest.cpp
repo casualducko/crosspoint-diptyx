@@ -33,6 +33,7 @@ TEST(UnitLinkProtocolTest, MessagesRoundTrip) {
   h.display.brightness = 65;
   h.display.warmth = 30;
   h.display.lightOn = true;
+  h.display.locked = true;
   ASSERT_EQ(feed(p, buf, encodeHello(h, buf), fr), 1);
   Hello g;
   ASSERT_TRUE(decodeHello(fr.back(), g));
@@ -44,6 +45,7 @@ TEST(UnitLinkProtocolTest, MessagesRoundTrip) {
   EXPECT_EQ(g.display.brightness, 65);
   EXPECT_EQ(g.display.warmth, 30);
   EXPECT_TRUE(g.display.lightOn);
+  EXPECT_TRUE(g.display.locked);
 
   PageState s;
   s.seq = 65535;

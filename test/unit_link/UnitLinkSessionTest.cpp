@@ -622,10 +622,12 @@ TEST(UnitLinkSessionTest, DisplayStateChangedOnEitherUnitReachesTheOther) {
   bright.lightOn = true;
   bright.brightness = 65;
   bright.warmth = 30;
+  bright.locked = true;
   r.left.setDisplay(bright, r.now);
   r.run(1500);
   ASSERT_TRUE(r.right.takeDisplay(got));
   EXPECT_TRUE(got == bright);
+  EXPECT_TRUE(got.locked);
   r.right.setDisplay(got, r.now);  // what the service does after adopting it
   r.run(3000);
   EXPECT_FALSE(r.left.takeDisplay(got));  // no echo
@@ -767,4 +769,25 @@ TEST(UnitLinkSessionTest, EndingTheLinkOnOneUnitIsHeardByTheOtherOnlyWhileLinked
   q.left.sendEnd();  // never started, so it sends into the pipe only
   q.run(50);
   EXPECT_FALSE(q.right.takeEndRequest());
+}
+
+TEST(UnitLinkSessionTest, DisplayPartsFollowSeparatelyAndASimultaneousOwnChangeIsKept) {
+  Rig r;
+  r.startBoth();
+  r.run(1500);
+  DisplayState a = r.left.display();
+  DisplayState b = r.right.display();
+  a.locked = true;    // the left unit locks ...
+  b.brightness = 40;  // ... while the right unit changes the light
+  r.left.setDisplay(a, r.now);
+  r.right.setDisplay(b, r.now);
+  r.run(2500);
+  DisplayState got;
+  uint8_t parts = 0;
+  ASSERT_TRUE(r.right.takeDisplay(got, &parts));
+  EXPECT_EQ(parts, DISPLAY_LOCK);  // only the lock is news to the right unit
+  EXPECT_TRUE(got.locked);
+  ASSERT_TRUE(r.left.takeDisplay(got, &parts));
+  EXPECT_EQ(parts, DISPLAY_LIGHT);  // only the light is news to the left unit
+  EXPECT_EQ(got.brightness, 40);
 }

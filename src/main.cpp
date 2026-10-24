@@ -47,6 +47,7 @@
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
+#include "util/TouchLock.h"
 #include "util/UnitLinkService.h"
 
 #if CROSSPOINT_VECTOR_FONTS
@@ -610,6 +611,7 @@ void setup() {
   if (BoardConfig::isDiptyx()) firstBootOfThisBuild = recordBuildBoot();
 
   APP_STATE.loadFromFile();
+  touchlock::restore();
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
   const bool isPersistedSleepWake = isSleepWake && !APP_STATE.showBootScreen;
 
@@ -863,6 +865,7 @@ void loop() {
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   mappedInputManager.update();
+  touchlock::tick();
   UnitLinkService::get().tick();
   if (!deepSleepInProgress && UnitLinkService::get().takePeerSleep()) enterDeepSleep();
 

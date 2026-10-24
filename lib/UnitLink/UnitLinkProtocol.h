@@ -12,7 +12,7 @@ namespace unitlink {
 constexpr uint8_t SOF = 0xA5;
 constexpr size_t MAX_PAYLOAD = 200;  // room for a book path
 constexpr size_t FRAME_OVERHEAD = 5;
-constexpr uint8_t PROTOCOL_VERSION = 4;
+constexpr uint8_t PROTOCOL_VERSION = 5;
 
 enum class Type : uint8_t {
   Hello = 1,  // pairing and heartbeat: role, version, book id, layout hash, whether the sender considers itself linked
@@ -32,7 +32,7 @@ enum class Type : uint8_t {
   Close = 14,      // either way: the sender left this book (its id); a peer reading it leaves too
 };
 
-constexpr size_t HELLO_LEN = 15;
+constexpr size_t HELLO_LEN = 16;
 constexpr size_t PAGE_STATE_LEN = 6;
 constexpr size_t LAYOUT_BLOB_LEN = 46;  // 14 one-byte text settings and a 32-byte SD font name
 constexpr size_t LAYOUT_LEN = 2 + LAYOUT_BLOB_LEN;
@@ -226,11 +226,25 @@ struct DisplayState {
   bool lightOn = false;
   uint8_t brightness = 0;  // 0..100
   uint8_t warmth = 0;      // 0..100
+  bool locked = false;     // touch lock (see HalGPIO::setTouchLocked)
   bool operator==(const DisplayState& o) const {
-    return night == o.night && lightOn == o.lightOn && brightness == o.brightness && warmth == o.warmth;
+    return night == o.night && lightOn == o.lightOn && brightness == o.brightness && warmth == o.warmth &&
+           locked == o.locked;
   }
   bool operator!=(const DisplayState& o) const { return !(*this == o); }
 };
+
+// Which parts of a DisplayState differ. The units follow each other part by part, so a change of one part does not
+// undo a different change made on this unit at the same moment.
+enum DisplayPart : uint8_t { DISPLAY_NIGHT = 1, DISPLAY_LIGHT = 2, DISPLAY_LOCK = 4 };
+
+inline uint8_t displayDiff(const DisplayState& a, const DisplayState& b) {
+  uint8_t m = 0;
+  if (a.night != b.night) m |= DISPLAY_NIGHT;
+  if (a.lightOn != b.lightOn || a.brightness != b.brightness || a.warmth != b.warmth) m |= DISPLAY_LIGHT;
+  if (a.locked != b.locked) m |= DISPLAY_LOCK;
+  return m;
+}
 
 struct Hello {
   Role role = Role::Left;
@@ -252,12 +266,13 @@ inline size_t encodeHello(const Hello& h, uint8_t* out) {
   p[12] = h.display.lightOn ? 1 : 0;
   p[13] = h.display.brightness;
   p[14] = h.display.warmth;
+  p[15] = h.display.locked ? 1 : 0;
   return encode(Type::Hello, p, sizeof(p), out);
 }
 
 inline bool decodeHello(const Frame& f, Hello& h) {
   if (f.type != Type::Hello || f.len != HELLO_LEN || f.payload[0] > 1 || f.payload[10] > 1 || f.payload[11] > 1 ||
-      f.payload[12] > 1 || f.payload[13] > 100 || f.payload[14] > 100) {
+      f.payload[12] > 1 || f.payload[13] > 100 || f.payload[14] > 100 || f.payload[15] > 1) {
     return false;
   }
   h.role = static_cast<Role>(f.payload[0]);
@@ -269,6 +284,7 @@ inline bool decodeHello(const Frame& f, Hello& h) {
   h.display.lightOn = f.payload[12] != 0;
   h.display.brightness = f.payload[13];
   h.display.warmth = f.payload[14];
+  h.display.locked = f.payload[15] != 0;
   return true;
 }
 

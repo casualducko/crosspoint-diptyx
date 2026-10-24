@@ -364,6 +364,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "sideButtonLayout", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
                             "touchReaderControls", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Toggle(StrId::STR_CASE_AUTO_LOCK, &CrossPointSettings::caseAutoLock, "caseAutoLock",
+                            StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_NEXT_PAGE_GESTURE, &CrossPointSettings::pageTurnGesture,
                           {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
                            StrId::STR_INVERTED_TAP, StrId::STR_DISABLED},
@@ -577,7 +579,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // center tap is the primary path, so the setting stays at its Tap default.
   if (!BoardConfig::hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_SHOW_READER_MENU; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_SHOW_READER_MENU || s.nameId == StrId::STR_CASE_AUTO_LOCK;
+                           }),
             v.end());
   }
   if (BoardConfig::hasHomeKey()) {

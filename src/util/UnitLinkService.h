@@ -47,6 +47,7 @@ class UnitLinkService {
   // For the Link screen's diagnostics line.
   uint32_t bytesSent() const { return link.bytesSent(); }
   uint32_t bytesReceived() const { return link.bytesReceived(); }
+  int signalDbm() const { return link.lastRssi(); }
   // Call once per main loop pass.
   void tick();
   // Ends the link and restarts the unit so USB comes back.
@@ -77,8 +78,14 @@ class UnitLinkService {
   bool nightApplied = false;
   unsigned long lastDisplaySendMs = 0;
   unsigned long lightSaveDueMs = 0;
+  int signalAverage = 0;
+  bool caseClosed = false;
+  bool caseKnown = false;
+  bool lightOffByCase = false;
+  unsigned long caseSinceMs = 0;
+  void watchCase(unsigned long now);
   unitlink::DisplayState currentDisplay() const;
-  void applyDisplay(const unitlink::DisplayState& target, unsigned long now);
+  void applyDisplay(const unitlink::DisplayState& target, uint8_t parts, unsigned long now);
   unsigned long layoutMismatchSinceMs = 0;
 
   uint32_t currentBookId = 0;

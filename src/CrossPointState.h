@@ -23,8 +23,9 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
-  std::string linkPeer;  // radio link: address of the locked peer as 12 hex digits, empty until the pair has linked
-  uint8_t linkSide = 0;  // two-unit link (X4 Pro): 0 off, 1 left page, 2 right page; restarted on every boot
+  uint8_t touchLocked = 0;  // touch lock (X4 Pro): touch input and the Home pad are ignored; kept across sleep
+  std::string linkPeer;     // radio link: address of the locked peer as 12 hex digits, empty until the pair has linked
+  uint8_t linkSide = 0;     // two-unit link (X4 Pro): 0 off, 1 left page, 2 right page; restarted on every boot
 
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;

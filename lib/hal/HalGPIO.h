@@ -39,6 +39,16 @@
 #define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
 
 class HalGPIO {
+  bool touchLockedFlag = false;
+  bool navGestureHoldFlag = false;
+  // Locked: Back and Confirm are hidden (on the X4 Pro they only come from the touch controller). Gesture hold: the
+  // page and direction buttons are hidden.
+  bool maskedByTouchLock(uint8_t buttonIndex) const {
+    if (touchLockedFlag && (buttonIndex == BTN_BACK || buttonIndex == BTN_CONFIRM)) return true;
+    return navGestureHoldFlag &&
+           (buttonIndex == BTN_LEFT || buttonIndex == BTN_RIGHT || buttonIndex == BTN_UP || buttonIndex == BTN_DOWN);
+  }
+
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
 #endif
@@ -83,6 +93,14 @@ class HalGPIO {
   // going through the debounced state. Cheap enough to call every few ms.
   bool rawInputActive();
   bool hasTouch() const;
+  // Touch lock: while on, everything the touch controller reports is ignored: taps, swipes, the capacitive Home key and
+  // the Back/Confirm presses made from them. The physical buttons keep working.
+  void setTouchLocked(bool locked) { touchLockedFlag = locked; }
+  bool touchLocked() const { return touchLockedFlag; }
+  // The touch-lock gesture (both page buttons held) owns those buttons until they are released: the rest of the
+  // firmware sees no press, hold or release of them. rawPressed() is the unmasked level the gesture itself reads.
+  void setNavGestureHold(bool hold) { navGestureHoldFlag = hold; }
+  bool rawPressed(uint8_t buttonIndex) const;
   // Capacitive Home key reported by the touch controller (X4 Pro). The tap
   // event fires on release and excludes a long hold.
   bool hasHomeKey() const;

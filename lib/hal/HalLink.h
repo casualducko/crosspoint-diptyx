@@ -33,6 +33,10 @@ class HalLink : public unitlink::Port {
   bool lastSender(uint8_t* out) const;
   // The radio was taken down under the link (a send failed because ESP-NOW is gone); restart() brings it back.
   bool radioDown() const;
+  // Radio build: signal strength (dBm) of the newest packet from the partner, 0 when none was heard or on the wire.
+  int lastRssi() const;
+  // Milliseconds since that packet arrived (large when none has).
+  uint32_t lastRssiAgeMs() const;
 
   size_t write(const uint8_t* data, size_t len) override;
   int read() override;

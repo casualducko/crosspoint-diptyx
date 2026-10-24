@@ -33,12 +33,18 @@ uint8_t senderMac[ESP_NOW_ETH_ALEN] = {};
 bool haveSender = false;
 std::atomic<int> sendsInFlight{0};
 std::atomic<bool> radioBroken{false};
+std::atomic<int> rssiNow{0};
+std::atomic<uint32_t> rssiAtMs{0};
 
 // Runs on the Wi-Fi task. A packet that does not fit whole is dropped (the session resends), never cut in two.
 void onReceive(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
   if (len <= 0 || info == nullptr || info->src_addr == nullptr) return;
   portENTER_CRITICAL(&rxLock);
   if (!peerIsLocked || memcmp(info->src_addr, peerMac, ESP_NOW_ETH_ALEN) == 0) {
+    if (info->rx_ctrl != nullptr) {
+      rssiNow = info->rx_ctrl->rssi;
+      rssiAtMs = millis();
+    }
     const size_t used = (rxHead + RX_RING - rxTail) % RX_RING;
     if (static_cast<size_t>(len) < RX_RING - used) {
       for (int i = 0; i < len; i++) {
@@ -182,6 +188,10 @@ bool HalLink::lastSender(uint8_t* out) const {
 
 bool HalLink::radioDown() const { return radioBroken.load(); }
 
+int HalLink::lastRssi() const { return rssiNow.load(); }
+
+uint32_t HalLink::lastRssiAgeMs() const { return rssiNow.load() == 0 ? UINT32_MAX : millis() - rssiAtMs.load(); }
+
 #else
 #include <BoardConfig.h>
 #include <Logging.h>
@@ -287,5 +297,7 @@ void HalLink::unlockPeer() {}
 bool HalLink::peerLocked() const { return false; }
 bool HalLink::lastSender(uint8_t*) const { return false; }
 bool HalLink::radioDown() const { return false; }
+int HalLink::lastRssi() const { return 0; }
+uint32_t HalLink::lastRssiAgeMs() const { return UINT32_MAX; }
 
 #endif  // UNITLINK_RADIO

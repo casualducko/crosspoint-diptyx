@@ -121,15 +121,35 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+  return !maskedByTouchLock(buttonIndex) && inputMgr.isPressed(buttonIndex);
+}
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+  return !maskedByTouchLock(buttonIndex) && inputMgr.wasPressed(buttonIndex);
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::rawPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasAnyPressed() const {
+  if (!touchLockedFlag && !navGestureHoldFlag) return inputMgr.wasAnyPressed();
+  for (uint8_t i = 0; i <= BTN_POWER; i++) {
+    if (!maskedByTouchLock(i) && inputMgr.wasPressed(i)) return true;
+  }
+  return false;
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+  return !maskedByTouchLock(buttonIndex) && inputMgr.wasReleased(buttonIndex);
+}
+
+bool HalGPIO::wasAnyReleased() const {
+  if (!touchLockedFlag && !navGestureHoldFlag) return inputMgr.wasAnyReleased();
+  for (uint8_t i = 0; i <= BTN_POWER; i++) {
+    if (!maskedByTouchLock(i) && inputMgr.wasReleased(i)) return true;
+  }
+  return false;
+}
 
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
@@ -148,35 +168,39 @@ bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
-bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }
+bool HalGPIO::wasHomeKeyPressed() const { return !touchLockedFlag && inputMgr.wasHomeKeyPressed(); }
 
-bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
+bool HalGPIO::wasHomeKeyTapped() const { return !touchLockedFlag && inputMgr.wasHomeKeyTapped(); }
 
-bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
+bool HalGPIO::wasHomeKeyLongPressed() const { return !touchLockedFlag && inputMgr.wasHomeKeyLongPressed(); }
 
-bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
+bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return !touchLockedFlag && inputMgr.wasTouchTap(nx, ny); }
 
-bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
-
-bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
-
-bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
-  return inputMgr.isTouchTapCandidate(nx, ny, heldMs);
+bool HalGPIO::wasTouchDown(float& nx, float& ny) const {
+  return !touchLockedFlag && inputMgr.wasTouchPressedAt(nx, ny);
 }
 
-bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+bool HalGPIO::wasTouchReleased() const { return !touchLockedFlag && inputMgr.wasTouchReleased(); }
 
-bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const { return inputMgr.wasTouchLongPress(nx, ny); }
+bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
+  return !touchLockedFlag && inputMgr.isTouchTapCandidate(nx, ny, heldMs);
+}
+
+bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return !touchLockedFlag && inputMgr.isTouchHeldAt(nx, ny); }
+
+bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const {
+  return !touchLockedFlag && inputMgr.wasTouchLongPress(nx, ny);
+}
 
 void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 
 unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
 
 bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
-  return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
+  return !touchLockedFlag && inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 
-bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
+bool HalGPIO::wasTouchActivity() const { return !touchLockedFlag && inputMgr.wasTouchActivity(); }
 
 void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
   InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);

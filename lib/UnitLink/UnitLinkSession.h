@@ -125,7 +125,8 @@ class Session {
   // left unit's differs: the left unit wins there). The caller applies it and calls setDisplay() with the result.
   void setDisplay(const DisplayState& state, uint32_t nowMs);
   const DisplayState& display() const { return cfg.display; }
-  bool takeDisplay(DisplayState& out);
+  // `parts` (DisplayPart bits) says which parts of `out` are news; the others are this unit's own and stay.
+  bool takeDisplay(DisplayState& out, uint8_t* parts = nullptr);
 
   // Either unit: the user ended the link here; the peer ends it too. One frame per call (the caller repeats it, as
   // nothing confirms it). takeEndRequest() is true once on the receiving side, and only while the link is up.
@@ -189,6 +190,7 @@ class Session {
   DisplayState peerDisplay;
   bool displayPending = false;
   DisplayState displayPendingValue;
+  uint8_t displayPendingParts = 0;
   uint16_t appliedLayoutCrc = 0;
 
   // Right side: presses waiting to be confirmed (the first one is in flight).
