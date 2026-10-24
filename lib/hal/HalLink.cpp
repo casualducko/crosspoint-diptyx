@@ -35,6 +35,7 @@ std::atomic<int> sendsInFlight{0};
 std::atomic<bool> radioBroken{false};
 std::atomic<int> rssiNow{0};
 std::atomic<uint32_t> rssiAtMs{0};
+std::atomic<uint32_t> rssiSeq{0};
 
 // Runs on the Wi-Fi task. A packet that does not fit whole is dropped (the session resends), never cut in two.
 void onReceive(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
@@ -44,6 +45,7 @@ void onReceive(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
     if (info->rx_ctrl != nullptr) {
       rssiNow = info->rx_ctrl->rssi;
       rssiAtMs = millis();
+      rssiSeq++;
     }
     const size_t used = (rxHead + RX_RING - rxTail) % RX_RING;
     if (static_cast<size_t>(len) < RX_RING - used) {
@@ -191,6 +193,7 @@ bool HalLink::radioDown() const { return radioBroken.load(); }
 int HalLink::lastRssi() const { return rssiNow.load(); }
 
 uint32_t HalLink::lastRssiAgeMs() const { return rssiNow.load() == 0 ? UINT32_MAX : millis() - rssiAtMs.load(); }
+uint32_t HalLink::rssiSamples() const { return rssiSeq.load(); }
 
 #else
 #include <BoardConfig.h>
@@ -299,5 +302,6 @@ bool HalLink::lastSender(uint8_t*) const { return false; }
 bool HalLink::radioDown() const { return false; }
 int HalLink::lastRssi() const { return 0; }
 uint32_t HalLink::lastRssiAgeMs() const { return UINT32_MAX; }
+uint32_t HalLink::rssiSamples() const { return 0; }
 
 #endif  // UNITLINK_RADIO

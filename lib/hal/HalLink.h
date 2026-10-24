@@ -37,6 +37,8 @@ class HalLink : public unitlink::Port {
   int lastRssi() const;
   // Milliseconds since that packet arrived (large when none has).
   uint32_t lastRssiAgeMs() const;
+  // Counts the packets that set lastRssi(), so a caller can tell a new reading from the one it already saw.
+  uint32_t rssiSamples() const;
 
   size_t write(const uint8_t* data, size_t len) override;
   int read() override;

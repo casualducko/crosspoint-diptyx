@@ -82,6 +82,8 @@ class UnitLinkService {
   bool caseClosed = false;
   bool caseKnown = false;
   bool lightOffByCase = false;
+  uint32_t lastRssiSample = 0;
+  unsigned long lastCaseChangeMs = 0;
   unsigned long caseSinceMs = 0;
   void watchCase(unsigned long now);
   unitlink::DisplayState currentDisplay() const;

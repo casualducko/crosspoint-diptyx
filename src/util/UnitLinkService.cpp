@@ -213,7 +213,10 @@ void UnitLinkService::applyRemoteLayout(const uint8_t* blob) {
 void UnitLinkService::watchCase(unsigned long now) {
   constexpr int CLOSED_DBM = -14;
   constexpr int OPEN_DBM = -17;
-  constexpr unsigned long SETTLE_MS = 2000;
+  constexpr unsigned long SETTLE_OPEN_MS =
+      1500;  // closing locks as soon as two packets agree: the screens touch at once
+  constexpr unsigned long HOLD_AFTER_CHANGE_MS =
+      8000;  // after a change the lock is not released again at once (no flapping); closing is never held
   constexpr uint32_t FRESH_MS = 3000;
   if (!caseKnown) {  // a lock kept from before sleep counts as "case closed": the first reading may open it
     caseKnown = true;
@@ -222,17 +225,27 @@ void UnitLinkService::watchCase(unsigned long now) {
   const int rssi = link.lastRssi();
   if (!SETTINGS.caseAutoLock || rssi == 0 || link.lastRssiAgeMs() > FRESH_MS) {
     caseSinceMs = 0;
+    signalAverage = 0;  // an old reading must not weigh on the first ones after the link comes back
     return;
   }
-  signalAverage = signalAverage == 0 ? rssi : (signalAverage * 3 + rssi) / 4;
+  if (session.role() != unitlink::Role::Left) return;  // one unit decides; the other follows the lock and the light
+  if (link.rssiSamples() != lastRssiSample) {          // one step per packet, not per loop pass
+    lastRssiSample = link.rssiSamples();
+    signalAverage = signalAverage == 0 ? rssi : (signalAverage + rssi) / 2;
+  }
   const bool wantClosed = caseClosed ? signalAverage > OPEN_DBM : signalAverage >= CLOSED_DBM;
+  if (!wantClosed && lastCaseChangeMs != 0 && now - lastCaseChangeMs < HOLD_AFTER_CHANGE_MS) {
+    caseSinceMs = 0;
+    return;
+  }
   if (wantClosed == caseClosed) {
     caseSinceMs = 0;
     return;
   }
   if (caseSinceMs == 0) caseSinceMs = now;
-  if (now - caseSinceMs < SETTLE_MS) return;
+  if (!wantClosed && now - caseSinceMs < SETTLE_OPEN_MS) return;
   caseSinceMs = 0;
+  lastCaseChangeMs = now;
   caseClosed = wantClosed;
   LOG_INF("LINK", "Case %s (signal %d dBm)", caseClosed ? "closed" : "open", signalAverage);
   touchlock::set(caseClosed);
@@ -248,7 +261,8 @@ void UnitLinkService::watchCase(unsigned long now) {
     } else {
       return;
     }
-    SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
+    SETTINGS.frontlightOn =
+        (Frontlight.isOn() || lightOffByCase) ? 1 : 0;  // asleep in a closed case: light back on at wake
     lightSaveDueMs = now + 1000;
     session.setDisplay(currentDisplay(), now);
   }
@@ -288,7 +302,7 @@ void UnitLinkService::applyDisplay(const unitlink::DisplayState& target, uint8_t
     Frontlight.setOn(target.lightOn);
     SETTINGS.frontlightBrightness = target.brightness;
     if (Frontlight.hasColorTemperature()) SETTINGS.frontlightWarmth = target.warmth;
-    SETTINGS.frontlightOn = target.lightOn ? 1 : 0;
+    SETTINGS.frontlightOn = (target.lightOn || lightOffByCase) ? 1 : 0;
     lightSaveDueMs = now + 1000;
   }
   if (lockChanged && !target.locked && lightOffByCase && Frontlight.present()) {
