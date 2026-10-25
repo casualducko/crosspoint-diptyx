@@ -143,6 +143,7 @@ size_t HalLink::write(const uint8_t* data, size_t len) {
   if (err != ESP_OK) {
     sendsInFlight--;
     if (err == ESP_ERR_ESPNOW_NOT_INIT || err == ESP_ERR_ESPNOW_IF) radioBroken = true;  // restart() fixes it
+    if (err == ESP_ERR_ESPNOW_NOT_FOUND && peerIsLocked) addPeer(peerMac);  // the earlier add failed: try again
     return 0;
   }
   sentBytes += len;

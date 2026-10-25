@@ -157,7 +157,9 @@ void settingsToBlob(uint8_t* out) {
 }
 
 bool blobToSettings(const uint8_t* in) {
-  if (in[3] >= CrossPointSettings::LINE_COMPRESSION_COUNT || in[4] >= CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT) {
+  if (in[0] >= CrossPointSettings::FONT_FAMILY_COUNT || in[2] >= CrossPointSettings::FONT_WEIGHT_COUNT ||
+      in[3] >= CrossPointSettings::LINE_COMPRESSION_COUNT || in[4] >= CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT ||
+      in[11] >= CrossPointSettings::IMAGE_RENDERING_COUNT) {
     return false;
   }
   SETTINGS.fontFamily = in[0];

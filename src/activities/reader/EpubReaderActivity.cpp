@@ -2446,7 +2446,8 @@ void EpubReaderActivity::serviceLink() {
     unitlink::JumpRequest jump;
     if (session.takeGoto(jump)) applyRemoteJump(jump);
     unitlink::KeyAction key;
-    while (session.takeKey(key)) {
+    // One turn at a time: a turn already waiting would be overwritten by the next press, so the rest stay queued.
+    while (pendingManualTurn == 0 && session.takeKey(key)) {
       if (key == unitlink::KeyAction::ToggleBookmark) {
         addBookmark(/*deferRender=*/true, /*pageDelta=*/1);  // the page the right unit shows
       } else {
