@@ -33,6 +33,8 @@ void Session::start(const Config& config, uint32_t nowMs) {
   gotoOutPending = false;
   gotoInReady = false;
   haveGotoSeq = false;
+  fileReqReady = false;
+  fileInHead = fileInCount = 0;
   closeOutLeft = 0;
   closeReady = false;
   layoutUnacked = false;
@@ -423,6 +425,21 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
       if (layoutUnacked && crc == layoutOutCrc) layoutUnacked = false;
       return;
     }
+    case Type::FileReq: {
+      FileRequest req;
+      if (!decodeFileRequest(f, req)) return;
+      lastRx = nowMs;
+      fileReq = req;
+      fileReqReady = true;
+      return;
+    }
+    case Type::FileData: {
+      FileChunk chunk;
+      if (!decodeFileChunk(f, chunk)) return;
+      lastRx = nowMs;
+      if (fileInCount < FILE_WINDOW) fileIn[(fileInHead + fileInCount++) % FILE_WINDOW] = chunk;
+      return;
+    }
     case Type::Close: {
       uint32_t id;
       if (!decodeClose(f, id)) return;
@@ -483,6 +500,38 @@ void Session::publish(uint16_t spine, uint16_t page, uint32_t nowMs) {
 }
 
 void Session::setBookPath(const std::string& path) { bookPath = path.size() <= MAX_PAYLOAD ? path : std::string(); }
+
+bool Session::requestFile(uint32_t offset, uint8_t count) {
+  if (currentStatus != Status::Linked && currentStatus != Status::Incompatible) return false;
+  FileRequest req;
+  req.bookId = peerBookId;
+  req.offset = offset;
+  req.count = count;
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  const size_t n = encodeFileRequest(req, buf);
+  return n && port.write(buf, n) == n;
+}
+
+bool Session::takeFileRequest(FileRequest& out) {
+  if (!fileReqReady) return false;
+  fileReqReady = false;
+  out = fileReq;
+  return true;
+}
+
+bool Session::sendFileChunk(uint32_t total, uint32_t offset, const uint8_t* data, size_t n) {
+  uint8_t buf[MAX_PAYLOAD + FRAME_OVERHEAD];
+  const size_t len = encodeFileChunk(total, offset, data, n, buf);
+  return len && port.write(buf, len) == len;
+}
+
+bool Session::takeFileChunk(FileChunk& out) {
+  if (fileInCount == 0) return false;
+  out = fileIn[fileInHead];
+  fileInHead = (fileInHead + 1) % FILE_WINDOW;
+  fileInCount--;
+  return true;
+}
 
 bool Session::takeBookRequest(std::string& path) {
   if (!bookRequested) return false;

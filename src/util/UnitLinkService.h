@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BookTransfer.h>
 #include <HalLink.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <UnitLinkSession.h>
 
@@ -43,10 +45,24 @@ class UnitLinkService {
   // What to tell the user about the link right now (STR_LINK_LINKED when all is well).
   StrId statusMessage() const;
   // Changes whenever the status or the reason for a mismatch changes.
-  uint8_t statusKey() const { return static_cast<uint8_t>(session.status()) | (session.incompatibleReasons() << 3); }
+  uint8_t statusKey() const {
+    return static_cast<uint8_t>(session.status()) | (session.incompatibleReasons() << 3) | (sending() ? 0x80 : 0);
+  }
+  // statusKey() once it has stayed the same for STATUS_SETTLE_MS: the reader redraws its status popup on this, so a
+  // link that flickers while the other unit is busy does not redraw the page again and again.
+  uint8_t settledStatusKey() const { return settledKey; }
+  // This unit served part of the open book to the other unit in the last few seconds.
+  bool sending() const { return serveLastMs != 0 && millis() - serveLastMs < SEND_SHOWN_MS; }
   // For the Link screen's diagnostics line.
   uint32_t bytesSent() const { return link.bytesSent(); }
   uint32_t bytesReceived() const { return link.bytesReceived(); }
+  // -1 while no book is coming in, else how much of it has arrived (percent).
+  int receivePercent() const {
+    return !receiving ? -1
+           : receiver.total() == 0
+               ? 0
+               : static_cast<int>(static_cast<uint64_t>(receiver.received()) * 100 / receiver.total());
+  }
   int signalDbm() const { return link.lastRssi(); }
   // Call once per main loop pass.
   void tick();
@@ -85,6 +101,34 @@ class UnitLinkService {
   uint32_t lastRssiSample = 0;
   unsigned long lastCaseChangeMs = 0;
   unsigned long caseSinceMs = 0;
+  // Book transfer. Receiving: this unit lacks the book the paired unit has open and pulls it into "<path>.part", then
+  // renames it. Sending: the open book is served to the paired unit a request at a time.
+  class FileSink;
+  class FileSource;
+  unitlink::BookReceiver receiver;
+  unitlink::BookServer server;
+  bool receiving = false;
+  std::string receivePath;
+  HalFile receiveFile;
+  HalFile serveFile;
+  unsigned long serveLastMs = 0;
+  static constexpr unsigned long SEND_SHOWN_MS = 3000;
+  static constexpr unsigned long STATUS_SETTLE_MS =
+      6000;  // the other unit can be busy opening a book for about that long
+  uint8_t settledKey = 0;
+  uint8_t pendingKey = 0;
+  unsigned long pendingKeySince = 0;
+  unsigned long receiveStartMs = 0;
+  int receiveShownPercent = -1;
+  std::string failedReceivePath;
+  unsigned long failedReceiveMs = 0;
+  bool startReceive(const std::string& path);
+  void tickReceive(unsigned long now);
+  void tickServe();
+  void showReceiveProgress();
+  void finishReceive();
+  void abortReceive(bool failed);
+  static bool receivablePath(const std::string& path);
   void watchCase(unsigned long now);
   unitlink::DisplayState currentDisplay() const;
   void applyDisplay(const unitlink::DisplayState& target, uint8_t parts, unsigned long now);

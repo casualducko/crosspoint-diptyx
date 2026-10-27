@@ -4,6 +4,7 @@
 #include <HalFrontlight.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cstring>
@@ -14,6 +15,8 @@
 #include "SilentRestart.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/RenderLock.h"
+#include "components/UITheme.h"
 #include "util/BookmarkUtil.h"
 #include "util/TouchLock.h"
 
@@ -122,6 +125,8 @@ bool UnitLinkService::takePeerSleep() {
 void UnitLinkService::setBook(const std::string& epubPath, const GfxRenderer& renderer) {
   if (!running()) return;
   if (epubPath.empty() && currentBookId != 0) session.sendClose(currentBookId, millis());  // Home: the peer leaves too
+  server.cancel();  // the open file belongs to the book that was open
+  if (serveFile.isOpen()) serveFile.close();
   currentBookId = bookIdFor(epubPath);
   currentBookPath = epubPath;
   textSettingsApplied = false;     // a book that opens now is laid out with the settings already in place
@@ -333,6 +338,12 @@ void UnitLinkService::tick() {
   if (!running() || ending) return;
   const unsigned long now = millis();
   session.update(now);
+  if (const uint8_t key = statusKey(); key != pendingKey) {
+    pendingKey = key;
+    pendingKeySince = now;
+  } else if (now - pendingKeySince >= STATUS_SETTLE_MS) {
+    settledKey = key;
+  }
   // Radio: the first unit that links is the partner; from then on only it is heard and answered.
   if (session.status() == unitlink::Status::Linked && !link.peerLocked()) {
     uint8_t mac[6];
@@ -382,8 +393,11 @@ void UnitLinkService::tick() {
     activityManager.goHome();
   }
 
+  tickReceive(now);
+  tickServe();
+
   std::string path;
-  if (session.takeBookRequest(path)) openRequestedBook(path);
+  if (session.takeBookRequest(path) && !receiving) openRequestedBook(path);
 
   uint8_t blob[unitlink::LAYOUT_BLOB_LEN];
   if (session.takeLayout(blob)) applyRemoteLayout(blob);
@@ -466,7 +480,7 @@ void UnitLinkService::openRequestedBook(const std::string& path) {
   lastRequestMs = millis();
   if (bookIdFor(path) == currentBookId) return;
   if (!Storage.exists(path.c_str())) {
-    LOG_ERR("LINK", "Left unit's book is not on this SD card: %s", path.c_str());
+    if (!startReceive(path)) LOG_ERR("LINK", "The other unit's book is not on this SD card: %s", path.c_str());
     return;
   }
   LOG_INF("LINK", "Opening the left unit's book: %s", path.c_str());
@@ -502,6 +516,7 @@ StrId UnitLinkService::statusMessage() const {
       return StrId::STR_LINK_LOST;
     case unitlink::Status::Incompatible: {
       const uint8_t reasons = session.incompatibleReasons();
+      if (sending() && reasons == unitlink::INCOMPATIBLE_BOOK) return StrId::STR_LINK_SENDING;
       if (reasons & unitlink::INCOMPATIBLE_ROLE) return StrId::STR_LINK_SAME_SIDE;
       if (reasons & unitlink::INCOMPATIBLE_VERSION) return StrId::STR_LINK_DIFFERENT_VERSION;
       if (reasons & unitlink::INCOMPATIBLE_BOOK) return StrId::STR_LINK_DIFFERENT_BOOK;
@@ -512,4 +527,164 @@ StrId UnitLinkService::statusMessage() const {
       break;
   }
   return StrId::STR_LINK_PAIRING;
+}
+
+// ---- Book transfer ----------------------------------------------------------------------------------------------
+
+namespace {
+constexpr unsigned long RECEIVE_RETRY_MS = 60000;  // after a failed transfer of a path
+
+bool endsWithEpub(const std::string& path) {
+  if (path.size() < 6) return false;
+  const std::string tail = path.substr(path.size() - 5);
+  return strcasecmp(tail.c_str(), ".epub") == 0;
+}
+}  // namespace
+
+// What a paired unit may make this unit write: an absolute .epub path without "..", empty parts or control characters.
+bool UnitLinkService::receivablePath(const std::string& path) {
+  if (path.empty() || path.size() > 180 || path[0] != '/' || !endsWithEpub(path)) return false;
+  for (char c : path) {
+    if (static_cast<unsigned char>(c) < 0x20 || c == '\\' || c == ':') return false;
+  }
+  if (path.find("//") != std::string::npos || path.find("/../") != std::string::npos) return false;
+  const size_t slash = path.find_last_of('/');
+  return path.compare(slash + 1, std::string::npos, "..") != 0 && path.size() > slash + 6;  // a name, not just ".epub"
+}
+
+class UnitLinkService::FileSink : public unitlink::Sink {
+ public:
+  explicit FileSink(HalFile& f) : file(f) {}
+  bool write(const uint8_t* data, size_t n) override { return file.write(data, n) == n; }
+
+ private:
+  HalFile& file;
+};
+
+class UnitLinkService::FileSource : public unitlink::Source {
+ public:
+  FileSource(HalFile& f, const std::string& p) : file(f), path(p) {}
+  // Opened when the first request names this book, so an idle link holds no file.
+  uint32_t size() override {
+    if (!file.isOpen() && !Storage.openFileForRead("LINK", path, file)) return 0;
+    return static_cast<uint32_t>(file.size());
+  }
+  bool read(uint32_t offset, uint8_t* out, size_t n) override {
+    return file.seekSet(offset) && file.read(out, n) == static_cast<int>(n);
+  }
+
+ private:
+  HalFile& file;
+  const std::string& path;
+};
+
+bool UnitLinkService::startReceive(const std::string& path) {
+  if (receiving || !receivablePath(path)) return false;
+  // Only the unit that was paired on purpose may send a file, and only when the two units agree on everything else.
+  const uint8_t reasons = session.incompatibleReasons();
+  if (!link.peerLocked() || session.peerBook() == 0 ||
+      (reasons & (unitlink::INCOMPATIBLE_VERSION | unitlink::INCOMPATIBLE_ROLE))) {
+    return false;
+  }
+  if (path == failedReceivePath && millis() - failedReceiveMs < RECEIVE_RETRY_MS) return false;
+  const std::string part = path + ".part";
+  const size_t slash = path.find_last_of('/');
+  if (slash > 0) Storage.ensureDirectoryExists(path.substr(0, slash).c_str());
+  if (!Storage.openFileForWrite("LINK", part, receiveFile)) {
+    LOG_ERR("LINK", "Cannot create %s", part.c_str());
+    return false;
+  }
+  receiving = true;
+  receivePath = path;
+  receiveStartMs = millis();
+  receiveShownPercent = -1;
+  receiver.begin(session, millis());
+  LOG_INF("LINK", "Receiving %s from the other unit", path.c_str());
+  showReceiveProgress();
+  return true;
+}
+
+void UnitLinkService::abortReceive(bool failed) {
+  if (receiveFile.isOpen()) receiveFile.close();
+  Storage.remove((receivePath + ".part").c_str());
+  if (failed) {
+    failedReceivePath = receivePath;
+    failedReceiveMs = millis();
+    LOG_ERR("LINK", "Book transfer failed: %s", receivePath.c_str());
+    if (gfx) {
+      RenderLock lock;
+      GUI.drawPopup(*gfx, tr(STR_LINK_RECEIVE_FAILED));
+    }
+  }
+  receiving = false;
+  receivePath.clear();
+}
+
+void UnitLinkService::finishReceive() {
+  receiveFile.close();
+  const std::string path = receivePath;
+  const std::string part = path + ".part";
+  if (Storage.exists(path.c_str()) || !Storage.rename(part.c_str(), path.c_str())) {
+    abortReceive(true);
+    return;
+  }
+  receiving = false;
+  receivePath.clear();
+  // The same name and size give the same book id on both units; anything else means the copy is not the book.
+  if (bookIdFor(path) != session.peerBook()) {
+    LOG_ERR("LINK", "Received book does not match the other unit's");
+    Storage.remove(path.c_str());
+    failedReceivePath = path;
+    failedReceiveMs = millis();
+    return;
+  }
+  const unsigned long ms = std::max(1ul, millis() - receiveStartMs);
+  LOG_INF("LINK", "Received %s: %u bytes in %lu ms (%lu KB/s)", path.c_str(), static_cast<unsigned>(receiver.total()),
+          ms, static_cast<unsigned long>(receiver.total()) / ms);
+  lastRequestedPath = path;
+  lastRequestMs = millis();
+  activityManager.goToReader(path);
+}
+
+// A popup at the start and then at every tenth: each one is a panel refresh, so no more often than that.
+void UnitLinkService::showReceiveProgress() {
+  if (!receiving || !gfx) return;
+  const int tenth = receivePercent() / 10;
+  if (tenth == receiveShownPercent) return;
+  receiveShownPercent = tenth;
+  const std::string text = std::string(tr(STR_LINK_RECEIVING)) + " " + std::to_string(tenth * 10) + "%";
+  RenderLock lock;
+  GUI.drawPopup(*gfx, text.c_str());
+}
+
+void UnitLinkService::tickReceive(unsigned long now) {
+  if (!receiving) return;
+  if (session.status() == unitlink::Status::Idle) {
+    abortReceive(true);
+    return;
+  }
+  showReceiveProgress();
+  FileSink sink(receiveFile);
+  switch (receiver.update(session, sink, now)) {
+    case unitlink::BookReceiver::State::Done:
+      finishReceive();
+      break;
+    case unitlink::BookReceiver::State::Failed:
+      abortReceive(true);
+      break;
+    default:
+      break;
+  }
+}
+
+// The unit that has the book open serves it. Requests name the book by its id; any other is ignored.
+void UnitLinkService::tickServe() {
+  if (currentBookId == 0 || currentBookPath.empty() || !link.peerLocked()) {
+    server.cancel();
+    return;
+  }
+  FileSource source(serveFile, currentBookPath);
+  const unsigned long now = millis();
+  if (server.update(session, source, currentBookId)) serveLastMs = now;
+  if (!server.busy() && serveFile.isOpen() && now - serveLastMs >= SEND_SHOWN_MS) serveFile.close();
 }

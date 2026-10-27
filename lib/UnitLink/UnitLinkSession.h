@@ -128,6 +128,19 @@ class Session {
   // `parts` (DisplayPart bits) says which parts of `out` are news; the others are this unit's own and stay.
   bool takeDisplay(DisplayState& out, uint8_t* parts = nullptr);
 
+  // Book transfer. The unit that lacks the book asks the other for it, a window of chunks at a time (see FileRequest);
+  // the unit that has it answers from the file it has open.
+  // The book id the peer reports in its Hello (0 until one arrived or while it has no book open).
+  uint32_t peerBook() const { return peerBookId; }
+  // Receiver: ask for `count` chunks (1..FILE_WINDOW) starting at `offset`. False when the link is not up.
+  bool requestFile(uint32_t offset, uint8_t count);
+  // Sender: the newest request from the peer, once.
+  bool takeFileRequest(FileRequest& out);
+  // Sender: one chunk. False when the radio did not take it (the receiver asks again after its timeout).
+  bool sendFileChunk(uint32_t total, uint32_t offset, const uint8_t* data, size_t n);
+  // Receiver: the next chunk, oldest first. Chunks beyond FILE_WINDOW waiting are dropped.
+  bool takeFileChunk(FileChunk& out);
+
   // Either unit: the user ended the link here; the peer ends it too. One frame per call (the caller repeats it, as
   // nothing confirms it). takeEndRequest() is true once on the receiving side, and only while the link is up.
   void sendEnd();
@@ -221,6 +234,13 @@ class Session {
   bool gotoInReady = false;
   uint16_t lastGotoSeq = 0;
   bool haveGotoSeq = false;
+
+  // Book transfer: the request waiting to be served, and the chunks waiting to be written.
+  FileRequest fileReq;
+  bool fileReqReady = false;
+  FileChunk fileIn[FILE_WINDOW];
+  size_t fileInHead = 0;
+  size_t fileInCount = 0;
 
   // Left side: the bookmark file being sent.
   std::string marksOut;

@@ -1428,6 +1428,9 @@ bool EpubReaderActivity::skipLoopDelay() {
 }
 
 void EpubReaderActivity::renderBook() {
+  // Noted before any early return: a path that skips the popup code below must still count as drawn for this status,
+  // or serviceLink() would ask for another draw on every loop pass.
+  if (auto& link = UnitLinkService::get(); link.running()) shownLinkKey = link.settledStatusKey();
   currentPageLinks.clear();
   if (!epub) return;
   // Runs under the render task's RenderLock; catches every requestUpdate()
@@ -1824,7 +1827,7 @@ void EpubReaderActivity::renderBook() {
   }
 
   if (auto& link = UnitLinkService::get(); link.running()) {
-    shownLinkKey = link.statusKey();
+    shownLinkKey = link.settledStatusKey();
     if (link.linkSession().status() != unitlink::Status::Linked)
       GUI.drawPopup(renderer, I18N.get(link.statusMessage()));
   }
@@ -2404,7 +2407,7 @@ void EpubReaderActivity::serviceLink() {
     link.refreshLayout(renderer);
   }
   // A status popup is drawn over the page while the link is not up, so a change means the page must be drawn again.
-  if (link.statusKey() != shownLinkKey) requestUpdate();
+  if (link.settledStatusKey() != shownLinkKey) requestUpdate();
   auto& session = link.linkSession();
   if (link.takeTextSettingsApplied()) applyReaderTextSettings();  // the other unit changed the text settings
   if (link.takeNightApplied()) discardOverlayPage();              // night mode flipped; the overlay snapshot is stale

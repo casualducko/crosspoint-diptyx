@@ -18,7 +18,7 @@
 namespace {
 constexpr const char* TAG = "LINK";
 constexpr uint8_t RADIO_CHANNEL = 1;
-constexpr size_t RX_RING = 2048;
+constexpr size_t RX_RING = 8192;  // a window of book chunks (FILE_WINDOW frames) must fit while the loop is busy
 constexpr uint32_t FLUSH_MAX_MS = 150;
 
 uint8_t rxRing[RX_RING];

@@ -12,7 +12,7 @@ namespace unitlink {
 constexpr uint8_t SOF = 0xA5;
 constexpr size_t MAX_PAYLOAD = 200;  // room for a book path
 constexpr size_t FRAME_OVERHEAD = 5;
-constexpr uint8_t PROTOCOL_VERSION = 5;
+constexpr uint8_t PROTOCOL_VERSION = 6;
 
 enum class Type : uint8_t {
   Hello = 1,  // pairing and heartbeat: role, version, book id, layout hash, whether the sender considers itself linked
@@ -30,6 +30,8 @@ enum class Type : uint8_t {
   GotoAck = 13,    // echoes the seq of a Goto
   End = 15,        // either way: the sender ended the link; the peer ends it too
   Close = 14,      // either way: the sender left this book (its id); a peer reading it leaves too
+  FileReq = 16,    // receiver -> sender: send the open book from this offset, so many chunks (see FileRequest)
+  FileData = 17,   // sender -> receiver: one chunk of the open book (see FILE_HEADER_LEN)
 };
 
 constexpr size_t HELLO_LEN = 16;
@@ -42,6 +44,10 @@ constexpr size_t GOTO_LEN = 11;         // seq, spine, page, flags, visible text
 constexpr size_t MARKS_HEADER_LEN = 6;  // crc of the whole file, offset of this chunk, size of the whole file
 constexpr size_t MARKS_CHUNK_DATA = MAX_PAYLOAD - MARKS_HEADER_LEN;
 constexpr size_t MARKS_MAX_TOTAL = 16384;
+constexpr size_t FILE_REQ_LEN = 9;     // book id, offset, chunk count
+constexpr size_t FILE_HEADER_LEN = 8;  // total size of the file, offset of this chunk
+constexpr size_t FILE_CHUNK_DATA = MAX_PAYLOAD - FILE_HEADER_LEN;
+constexpr uint8_t FILE_WINDOW = 24;  // chunks asked for at once; the receive side holds this many
 
 // Every message has a fixed payload size except Book (a path). Checking the size as soon as it arrives lets the parser
 // drop a stray SOF from line noise at once instead of waiting for a long payload that will never come.
@@ -76,6 +82,10 @@ inline bool lengthAllowed(Type type, size_t len) {
       return len > MARKS_HEADER_LEN && len <= MAX_PAYLOAD;
     case Type::MarksAck:
       return len == 2;
+    case Type::FileReq:
+      return len == FILE_REQ_LEN;
+    case Type::FileData:
+      return len > FILE_HEADER_LEN && len <= MAX_PAYLOAD;
   }
   return false;
 }
@@ -334,6 +344,56 @@ inline size_t encodeMarksChunk(uint16_t fileCrc, uint16_t offset, uint16_t total
   put16(p + 4, total);
   memcpy(p + MARKS_HEADER_LEN, data, n);
   return encode(Type::Marks, p, MARKS_HEADER_LEN + n, out);
+}
+
+// The receiver of a book asks for it a window at a time, from the first byte it does not have yet; a lost frame costs
+// one repeated request, and the sender keeps no state between requests.
+struct FileRequest {
+  uint32_t bookId = 0;  // the sender's book id from its Hello, so a request for another book is ignored
+  uint32_t offset = 0;
+  uint8_t count = 0;  // 1..FILE_WINDOW
+};
+
+inline size_t encodeFileRequest(const FileRequest& r, uint8_t* out) {
+  uint8_t p[FILE_REQ_LEN];
+  put32(p, r.bookId);
+  put32(p + 4, r.offset);
+  p[8] = r.count;
+  return encode(Type::FileReq, p, sizeof(p), out);
+}
+
+inline bool decodeFileRequest(const Frame& f, FileRequest& r) {
+  if (f.type != Type::FileReq || f.len != FILE_REQ_LEN || f.payload[8] == 0 || f.payload[8] > FILE_WINDOW) return false;
+  r.bookId = get32(f.payload);
+  r.offset = get32(f.payload + 4);
+  r.count = f.payload[8];
+  return true;
+}
+
+struct FileChunk {
+  uint32_t total = 0;
+  uint32_t offset = 0;
+  uint8_t len = 0;
+  uint8_t data[FILE_CHUNK_DATA] = {};
+};
+
+inline size_t encodeFileChunk(uint32_t total, uint32_t offset, const uint8_t* data, size_t n, uint8_t* out) {
+  uint8_t p[MAX_PAYLOAD];
+  if (n == 0 || n > FILE_CHUNK_DATA) return 0;
+  put32(p, total);
+  put32(p + 4, offset);
+  memcpy(p + FILE_HEADER_LEN, data, n);
+  return encode(Type::FileData, p, FILE_HEADER_LEN + n, out);
+}
+
+inline bool decodeFileChunk(const Frame& f, FileChunk& c) {
+  if (f.type != Type::FileData || f.len <= FILE_HEADER_LEN) return false;
+  c.total = get32(f.payload);
+  c.offset = get32(f.payload + 4);
+  c.len = static_cast<uint8_t>(f.len - FILE_HEADER_LEN);
+  if (c.total == 0 || c.offset >= c.total || c.len > c.total - c.offset) return false;
+  memcpy(c.data, f.payload + FILE_HEADER_LEN, c.len);
+  return true;
 }
 
 inline size_t encodeLayout(uint16_t crc, const uint8_t* blob, uint8_t* out) {
