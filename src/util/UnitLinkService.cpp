@@ -235,6 +235,7 @@ void UnitLinkService::watchCase(unsigned long now) {
     lastRssiSample = link.rssiSamples();
     signalAverage = signalAverage == 0 ? rssi : (signalAverage + rssi) / 2;
   }
+  if (signalAverage == 0) return;  // no packet since the average was cleared: 0 dBm would read as "case closed"
   const bool wantClosed = caseClosed ? signalAverage > OPEN_DBM : signalAverage >= CLOSED_DBM;
   if (!wantClosed && lastCaseChangeMs != 0 && now - lastCaseChangeMs < HOLD_AFTER_CHANGE_MS) {
     caseSinceMs = 0;
