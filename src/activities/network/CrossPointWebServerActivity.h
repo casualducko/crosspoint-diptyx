@@ -62,6 +62,9 @@ class CrossPointWebServerActivity final : public Activity {
   void renderWifiIndicator(int subHeaderTop) const;
 
   void onNetworkModeSelected(NetworkMode mode);
+
+
+  void launchModeSelection();
   void onWifiSelectionComplete(bool connected);
   void startAccessPoint();
   void startWebServer();

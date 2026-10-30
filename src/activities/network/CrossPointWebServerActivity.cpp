@@ -20,6 +20,7 @@
 #include "util/PluginEvents.h"
 #include "util/QrUtils.h"
 #include "util/TaskWatchdog.h"
+#include "util/UnitLinkService.h"
 
 namespace {
 // AP Mode configuration
@@ -95,7 +96,10 @@ void CrossPointWebServerActivity::onEnter() {
     return;
   }
 
-  // Launch network mode selection subactivity
+  launchModeSelection();
+}
+
+void CrossPointWebServerActivity::launchModeSelection() {
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) {
@@ -159,6 +163,16 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 
 #if FREEINK_CAP_USB_MSC
   if (mode == NetworkMode::USB_DRIVE) {
+    // The link holds the radio and the SD card for book transfers, and USB Drive hands the card to the computer.
+    if (UnitLinkService::get().running()) {
+      {
+        RenderLock lock;
+        GUI.drawPopup(renderer, tr(STR_USB_DRIVE_LINKED));
+      }
+      delay(2500);
+      launchModeSelection();
+      return;
+    }
     activityManager.goToUsbDrive();
     return;
   }
