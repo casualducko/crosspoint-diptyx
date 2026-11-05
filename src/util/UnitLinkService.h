@@ -35,6 +35,10 @@ class UnitLinkService {
   void bookmarksSaved(const std::string& epubPath);
   // Right unit: true once after the left unit's bookmark file replaced this unit's.
   bool takeBookmarksUpdated();
+  // A position picked on the right unit while the Wi-Fi sync reboots it: kept across the reboot and sent to the left
+  // unit once the link is up again.
+  static void keepSyncJump(const unitlink::JumpRequest& jump);
+  static bool takeSyncJump(unitlink::JumpRequest& jump);
   // Right or left unit: true once after the other unit's text settings replaced this unit's. The reader must lay the
   // page out again.
   bool takeTextSettingsApplied();

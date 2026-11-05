@@ -2432,6 +2432,10 @@ void EpubReaderActivity::serviceLink() {
   if (bookmarkAwaitingMs != 0 && millis() - bookmarkAwaitingMs > 6000) bookmarkAwaitingMs = 0;
   if (linkFollower()) {
     automaticPageTurnActive = false;
+    unitlink::JumpRequest syncJump;
+    if (session.status() == unitlink::Status::Linked && link.takeSyncJump(syncJump)) {
+      session.sendGoto(syncJump, millis());
+    }
     unitlink::PageState remote;
     if (session.takeRemote(remote) && remote.spine < epub->getSpineItemsCount()) {
       RenderLock lock;

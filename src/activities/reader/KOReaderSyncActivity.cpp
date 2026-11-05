@@ -25,6 +25,7 @@
 #include "components/UiAppHelpers.h"  // list icons for the compare rows
 #include "fontIds.h"
 #include "network/WifiPowerSaveGuard.h"
+#include "util/UnitLinkService.h"
 
 namespace fui = freeink::ui;
 
@@ -92,6 +93,17 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
     }
     requestUpdate(true);
     return;
+  }
+  // The left unit owns the position: the right unit hands it the place it just synced to, after the reboot.
+  if (auto& link = UnitLinkService::get(); link.running() && link.role() == unitlink::Role::Right) {
+    unitlink::JumpRequest jump;
+    jump.spine = static_cast<uint16_t>(std::max(0, spineIndex));
+    jump.page = static_cast<uint16_t>(std::clamp(page, 0, 65535));
+    if (offset) {
+      jump.kind = unitlink::JumpKind::Offset;
+      jump.value = *offset;
+    }
+    UnitLinkService::keepSyncJump(jump);
   }
   returnToReader();
 }

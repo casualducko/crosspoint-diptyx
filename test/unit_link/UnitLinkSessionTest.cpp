@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <new>
+
 #include <deque>
 
 #include "UnitLinkSession.h"
@@ -212,6 +214,27 @@ TEST(UnitLinkSessionTest, RestartedRightUnitGetsThePositionAgain) {
   ASSERT_TRUE(r.right.takeRemote(s));
   EXPECT_EQ(s.spine, 4);
   EXPECT_EQ(s.page, 77);
+}
+
+TEST(UnitLinkSessionTest, RestartedLeftUnitsNewPositionIsNotMistakenForAnOldOne) {
+  Rig r;
+  r.startBoth();
+  r.run(300);
+  for (uint16_t page = 10; page < 16; page++) {
+    r.left.publish(2, page, r.now);
+    r.run(300);
+  }
+  PageState s;
+  ASSERT_TRUE(r.right.takeRemote(s));
+  r.left.~Session();  // the left unit synced with KOReader and rebooted: a new session, its counter starts again
+  new (&r.left) Session(r.leftEnd);
+  r.left.start(r.cfg(Role::Left), r.now);
+  r.run(2000);
+  r.left.publish(9, 3, r.now);
+  r.run(2000);
+  ASSERT_TRUE(r.right.takeRemote(s));
+  EXPECT_EQ(s.spine, 9);
+  EXPECT_EQ(s.page, 3);
 }
 
 TEST(UnitLinkSessionTest, SleepRequestReachesThePeerOnce) {

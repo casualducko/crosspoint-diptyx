@@ -6,6 +6,8 @@
 #include <Logging.h>
 #include <strings.h>
 
+#include <esp_attr.h>
+
 #include <algorithm>
 #include <cstring>
 
@@ -433,6 +435,24 @@ void UnitLinkService::tick() {
 
 void UnitLinkService::bookmarksSaved(const std::string& epubPath) {
   if (running() && session.role() == unitlink::Role::Left && epubPath == currentBookPath) marksDirty = true;
+}
+
+namespace {
+constexpr uint32_t SYNC_JUMP_MAGIC = 0x4B4F4A50;
+RTC_NOINIT_ATTR uint32_t syncJumpMagic;
+RTC_NOINIT_ATTR unitlink::JumpRequest syncJump;
+}  // namespace
+
+void UnitLinkService::keepSyncJump(const unitlink::JumpRequest& jump) {
+  syncJump = jump;
+  syncJumpMagic = SYNC_JUMP_MAGIC;
+}
+
+bool UnitLinkService::takeSyncJump(unitlink::JumpRequest& jump) {
+  if (syncJumpMagic != SYNC_JUMP_MAGIC) return false;
+  syncJumpMagic = 0;
+  jump = syncJump;
+  return true;
 }
 
 bool UnitLinkService::takeBookmarksUpdated() {

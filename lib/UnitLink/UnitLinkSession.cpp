@@ -330,6 +330,7 @@ void Session::handleFrame(const Frame& f, uint32_t nowMs) {
         peerFresh++;
         haveKeySeq = false;  // a restarted right unit counts its presses from the start again
         haveGotoSeq = false;
+        haveRemote = false;  // a restarted left unit counts its positions from the start again
       }
       const bool wasLinked = currentStatus == Status::Linked;
       currentStatus = Status::Linked;
